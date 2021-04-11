@@ -3,17 +3,32 @@ import socket
 HOST = '127.0.0.1'  # Standard loopback interface address (localhost)
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 
+panPos = 0
+tiltPos = 0
+
 
 def set_axis(pan, tilt):
-    pass
+    global panPos
+    global tiltPos
+    panPos += pan
+    if panPos <= 0:
+        panPos = 0
+    if panPos >= 1023:
+        panPos = 1023
+
+    tiltPos += tilt
+    if tiltPos <= 0:
+        tiltPos = 0
+    if tiltPos >= 1023:
+        tiltPos = 1023
 
 
 def get_pan():
-    return 1023
+    return panPos
 
 
 def get_tilt():
-    return 1023
+    return tiltPos
 
 
 def handle_command(data):
@@ -28,7 +43,7 @@ def handle_command(data):
 
     cmd = data[2]
     if cmd == 0x01:
-        set_axis(data[3], data[4])
+        set_axis(int.from_bytes(bytearray([data[3]]), byteorder='big', signed=True), int.from_bytes(bytearray([data[4]]), byteorder='big', signed=True))
 
 
 def comm_handler(conn):
@@ -58,4 +73,3 @@ if __name__ == '__main__':
             with conn:
                 print('Connected by', addr)
                 comm_handler(conn)
-                s.close()
