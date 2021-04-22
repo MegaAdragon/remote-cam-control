@@ -7,29 +7,44 @@ HOST = '127.0.0.1'  # The server's hostname or IP address
 PORT = 65432  # The port used by the server
 
 pygame.init()
-pygame.display.set_mode((800, 600))
-
+screen = pygame.display.set_mode((800, 600))
 
 def handle_recv(data):
-    if len(data) < 3:
-        return
-    if data[0] != 0xAA:
-        return
-
-    dataLength = data[1]
-    if dataLength != len(data) - 1:
-        return
-
-    cmd = data[2]
-    if cmd == 0x01:
-        panPos = int.from_bytes(bytearray([data[3], data[4]]), byteorder='big')
-        tiltPos = int.from_bytes(bytearray([data[5], data[6]]), byteorder='big')
+    if data[0] == 0x01 and len(data) == 11:
+        panPos = int.from_bytes(bytearray([data[2] + data[3], data[4] + data[5]]), byteorder='big')
+        tiltPos = int.from_bytes(bytearray([data[6] + data[7], data[8] + data[9]]), byteorder='big')
         print("pos:", panPos, tiltPos)
+
+
+def handle_joystick():
+    pressed_keys = pygame.key.get_pressed()
+    pan_speed = 0
+    tilt_speed = 0
+
+    if pressed_keys[K_UP]:
+        tilt_speed = 10
+    elif pressed_keys[K_DOWN]:
+        tilt_speed = -10
+    if pressed_keys[K_LEFT]:
+        pan_speed = -10
+    elif pressed_keys[K_RIGHT]:
+        pan_speed = 10
+
+    pygame.draw.circle(screen, (255, 0, 0), (400 + pan_speed * 20, 300 - tilt_speed * 20), 10)
+
+    if pan_speed != 0 or tilt_speed != 0:
+        # 01 00 xx yy FF
+        data = bytearray([0x01, 0x00])
+        data += pan_speed.to_bytes(1, byteorder='big', signed=True)
+        data += tilt_speed.to_bytes(1, byteorder='big', signed=True)
+        data += bytearray([0xFF])
+        s.sendall(data)
 
 
 if __name__ == '__main__':
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
+        s.setblocking(False)
 
         running = True
         while running:
@@ -37,25 +52,17 @@ if __name__ == '__main__':
                 if event.type == pygame.QUIT:
                     running = False
 
-            pressed_keys = pygame.key.get_pressed()
+            screen.fill((0, 0, 0))
+            pygame.draw.circle(screen, (255, 0, 0), (400, 300), 200, 1)
 
-            pan = 0
-            tilt = 0
+            handle_joystick()
 
-            if pressed_keys[K_UP]:
-                tilt = 10
-            elif pressed_keys[K_DOWN]:
-                tilt = -10
-            if pressed_keys[K_LEFT]:
-                pan = -10
-            elif pressed_keys[K_RIGHT]:
-                pan = 10
+            pygame.display.flip()
 
-            data = bytearray([0xAA, 0x00, 0x01])
-            data += pan.to_bytes(1, byteorder='big', signed=True)
-            data += tilt.to_bytes(1, byteorder='big', signed=True)
-            data[1] = len(data) - 1
-            s.sendall(data)
-            data = s.recv(16)
-            handle_recv(data)
+            try:
+                data = s.recv(16)
+                handle_recv(data)
+            except socket.error:
+                '''no data yet..'''
+
             time.sleep(0.1)

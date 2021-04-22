@@ -32,18 +32,25 @@ def get_tilt():
 
 
 def handle_command(data):
-    if len(data) < 3:
-        return
-    if data[0] != 0xAA:
-        return
+    if data[0] == 0x01: # move
+        cmd = data[1]
+        if cmd == 0x00: # speed
+            set_axis(int.from_bytes(bytearray([data[2]]), byteorder='big', signed=True), int.from_bytes(bytearray([data[3]]), byteorder='big', signed=True))
 
-    dataLength = data[1]
-    if dataLength != len(data) - 1:
-        return
-
-    cmd = data[2]
-    if cmd == 0x01:
-        set_axis(int.from_bytes(bytearray([data[3]]), byteorder='big', signed=True), int.from_bytes(bytearray([data[4]]), byteorder='big', signed=True))
+        pan = get_pan().to_bytes(2, byteorder='big')
+        tilt = get_tilt().to_bytes(2, byteorder='big')
+        rsp = bytearray([0x01, cmd])
+        rsp.append(pan[0] & 0xF0)
+        rsp.append(pan[0] & 0x0F)
+        rsp.append(pan[1] & 0xF0)
+        rsp.append(pan[1] & 0x0F)
+        rsp.append(tilt[0] & 0xF0)
+        rsp.append(tilt[0] & 0x0F)
+        rsp.append(tilt[1] & 0xF0)
+        rsp.append(tilt[1] & 0x0F)
+        rsp.append(0xFF)
+        print(rsp)
+        conn.sendall(rsp)
 
 
 def comm_handler(conn):
@@ -52,15 +59,8 @@ def comm_handler(conn):
         if not data:
             print("socket closed")
             return
+
         handle_command(data)
-        pan = get_pan().to_bytes(2, byteorder='big')
-        tilt = get_tilt().to_bytes(2, byteorder='big')
-        resp = bytearray([0xAA, 0x00, 0x01])
-        resp += pan
-        resp += tilt
-        resp[1] = len(resp) - 1
-        print(resp)
-        conn.sendall(resp)
 
 
 if __name__ == '__main__':
