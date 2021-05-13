@@ -1,4 +1,5 @@
-#include "ESP8266WiFi.h"
+#include <ESP8266WiFi.h>
+#include <AccelStepper.h>
 
 // TODO: add some kind of configuration mechanism here
 const char* ssid = "";
@@ -7,19 +8,40 @@ const char* password =  "";
 WiFiServer wifiServer(80);  // TCP socket server on port 80
 
 /*
- * Axis steps are represented as 2 byte unsinged integer
- */
-typedef union steps_t
+   Axis steps are represented as 2 byte unsigned integer
+*/
+typedef union
 {
   uint16_t steps;
   byte data[2];  // little endian
+} StepperPosition;
+
+/*
+   Structure to hold all the information for a Stepper Motor (handle)
+*/
+typedef struct {
+  const char* name; // this is only for debug purposes
+  const int vMax; // max speed
+  const int acc;  // acceleration
+  AccelStepper stepper;
+} StepperHandle;
+
+StepperHandle stepperList[] {
+  {
+    .name = "Pan",
+    .vMax = 800,
+    .acc = 1200,
+    .stepper = AccelStepper (AccelStepper::DRIVER, 1, 2)
+  },
+  {
+    .name = "Tilt",
+    .vMax = 800,
+    .acc = 1200,
+    .stepper = AccelStepper (AccelStepper::DRIVER, 3, 4)
+  }
 };
 
-steps_t panPos;
-steps_t tiltPos;
-
-int8_t panSpeed = 0;
-int8_t tiltSpeed = 0;
+#define EN_PIN    0 //enable (CFG6) - One pin for all drivers
 
 void setup() {
   Serial.begin(115200);
@@ -29,13 +51,27 @@ void setup() {
   // wait for WiFi connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
-    Serial.println("Connecting..");
+    Serial.println("Connecting...");
   }
 
   Serial.print("Connected to WiFi. IP:");
   Serial.println(WiFi.localIP());
 
   wifiServer.begin();
+
+  // iterate through all handles and initialize the Stepper Motors
+  for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+    Serial.printf("Initialize Stepper: %s\n", stepperList[i].name);
+    Serial.printf("Max speed: %d\n", stepperList[i].vMax);
+    stepperList[i].stepper.setMaxSpeed(stepperList[i].vMax);
+    Serial.printf("Acceleration: %d\n", stepperList[i].acc);
+    stepperList[i].stepper.setAcceleration(stepperList[i].acc);
+  }
+
+  digitalWrite(EN_PIN, LOW); // activate driver (LOW active)
+  pinMode(EN_PIN, OUTPUT);
+
+  // TODO: move to home and call setCurrentPosition()
 }
 
 void loop() {
@@ -45,10 +81,9 @@ void loop() {
     while (client.connected()) {
       commHandler(client);  // handle incoming data
 
-      panPos.steps += panSpeed;
-      tiltPos.steps += tiltSpeed;
-      
-      delay(10);
+      for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+        stepperList[i].stepper.runSpeed();
+      }
     }
 
     client.stop();
@@ -110,11 +145,16 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
 
 void moveAxis(int8_t pan, int8_t tilt) {
   Serial.printf("Move axis: %d | %d\n", pan, tilt);
-  panSpeed = pan;
-  tiltSpeed = tilt;
+  stepperList[0].stepper.setSpeed(map(pan, -0x7F, 0x7F, -stepperList[0].vMax, stepperList[0].vMax));
+  stepperList[1].stepper.setSpeed(map(tilt, -0x7F, 0x7F, -stepperList[1].vMax, stepperList[1].vMax));
 }
 
 void sendAxisPosition(WiFiClient& client, byte cmd) {
+  StepperPosition panPos, tiltPos;
+  // FIXME: this implicitly casts from int32 to uint16
+  panPos.steps = stepperList[0].stepper.currentPosition();
+  tiltPos.steps = stepperList[1].stepper.currentPosition();
+
   byte resp[16];  // response buffer
   byte idx = 0;
   resp[idx++] = 0x01; // module ID: axis controller
