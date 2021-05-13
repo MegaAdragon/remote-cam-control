@@ -6,6 +6,21 @@ const char* password =  "";
 
 WiFiServer wifiServer(80);  // TCP socket server on port 80
 
+/*
+ * Axis steps are represented as 2 byte unsinged integer
+ */
+typedef union steps_t
+{
+  uint16_t steps;
+  byte data[2];  // little endian
+};
+
+steps_t panPos;
+steps_t tiltPos;
+
+int8_t panSpeed = 0;
+int8_t tiltSpeed = 0;
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -29,6 +44,11 @@ void loop() {
   if (client) {
     while (client.connected()) {
       commHandler(client);  // handle incoming data
+
+      panPos.steps += panSpeed;
+      tiltPos.steps += tiltSpeed;
+      
+      delay(10);
     }
 
     client.stop();
@@ -48,6 +68,7 @@ void commHandler(WiFiClient& client) {
 
     if (idx >= 16) {
       idx = 0; // overflow -> this should never happen
+      Serial.println("Error: overflow");
     }
 
     // found msg delimiter
@@ -66,8 +87,6 @@ void commHandler(WiFiClient& client) {
 }
 
 void handleCommand(WiFiClient& client, byte data[], int length) {
-  Serial.printf("handle command, length: %d\n", length);
-
   if (length < 2) {
     Serial.println("Error: invalid command");
     return;
@@ -79,8 +98,7 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
   if (moduleId == 0x01) { // axis controller
     switch (cmd) {
       case 0x00:  // move (pan + tilt)
-        setAxis(data[2], data[3]);
-        sendAxisPosition(client, cmd);
+        moveAxis(data[2], data[3]);
         break;
       case 0x0A:  // get axis position
         sendAxisPosition(client, cmd);
@@ -90,22 +108,10 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
   }
 }
 
-/*
- * Axis steps are represented as 2 byte unsinged integer
- */
-typedef union steps_t
-{
-  uint16_t steps;
-  byte data[2];  // little endian
-};
-
-steps_t panPos;
-steps_t tiltPos;
-
-void setAxis(int8_t pan, int8_t tilt) {
-  Serial.printf("Set axis: %d | %d\n", pan, tilt);
-  panPos.steps += pan;
-  tiltPos.steps += tilt;
+void moveAxis(int8_t pan, int8_t tilt) {
+  Serial.printf("Move axis: %d | %d\n", pan, tilt);
+  panSpeed = pan;
+  tiltSpeed = tilt;
 }
 
 void sendAxisPosition(WiFiClient& client, byte cmd) {
