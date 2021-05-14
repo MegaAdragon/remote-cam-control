@@ -1,7 +1,7 @@
 import socket
 import time
 import pygame
-from pygame import K_DOWN, K_UP, K_LEFT, K_RIGHT
+from pygame import K_DOWN, K_UP, K_LEFT, K_RIGHT, K_h
 
 HOST = '192.168.0.117'  # The server's hostname or IP address
 PORT = 80  # The port used by the server
@@ -95,6 +95,10 @@ if __name__ == '__main__':
             pygame.draw.circle(screen, (255, 0, 0), (400, 300), 200, 1)
 
             handle_joystick()
+
+            pressed_keys = pygame.key.get_pressed()
+            if pressed_keys[K_h]:
+                s.sendall(bytearray([0x01, 0x01, 0xFF])) # set pan + tilt to 0
 
             # poll the current axis position
             s.sendall(bytearray([0x01, 0x0A, 0xFF]))

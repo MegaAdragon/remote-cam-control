@@ -22,21 +22,27 @@ typedef union
 typedef struct {
   const char* name; // this is only for debug purposes
   const int vMax; // max speed
-  const int acc;  // acceleration
+  const float acc;  // acceleration
   AccelStepper stepper;
+
+  enum State {
+    STOP,
+    SPEED,
+    TARGET
+  } state;
 } StepperHandle;
 
 StepperHandle stepperList[] {
   {
     .name = "Pan",
     .vMax = 800,
-    .acc = 1200,
+    .acc = 200.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 1, 2)
   },
   {
     .name = "Tilt",
     .vMax = 800,
-    .acc = 1200,
+    .acc = 200.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 3, 4)
   }
 };
@@ -82,7 +88,33 @@ void loop() {
       commHandler(client);  // handle incoming data
 
       for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
-        stepperList[i].stepper.runSpeed();
+        if (stepperList[i].stepper.currentPosition() == 0 && stepperList[i].stepper.speed() < 0.0f) {
+          stepperList[i].state = StepperHandle::State::STOP;
+        }
+
+        switch (stepperList[i].state) {
+          case StepperHandle::State::SPEED: // move stepper with constant speed
+            stepperList[i].stepper.runSpeed();
+            break;
+          case StepperHandle::State::TARGET:  // move stepper to target position (with acceleration + decceleration)
+            if (!stepperList[i].stepper.run()) {
+              stepperList[i].state = StepperHandle::State::STOP; // stepper reached target -> stop
+            }
+            break;
+          case StepperHandle::State::STOP:
+            /*
+               TODO:
+               Not 100% sure why this extra state is neccessary.
+               Somehow, setting the speed to 0 causes the moveTo() to get stuck.
+               With this separate state I can make sure to always reset the target position and the speed.
+            */
+            stepperList[i].stepper.stop();
+            stepperList[i].stepper.setSpeed(0);
+            break;
+          default:
+            // nothing to do
+            break;
+        }
       }
     }
 
@@ -135,8 +167,16 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
       case 0x00:  // move (pan + tilt)
         moveAxis(data[2], data[3]);
         break;
+      case 0x01:
+        // TODO: add position arguments
+        StepperPosition panPos, tiltPos;
+        panPos.steps = 0;
+        tiltPos.steps = 0;
+        moveToPosition(panPos, tiltPos);
+        break;
       case 0x0A:  // get axis position
         sendAxisPosition(client, cmd);
+        break;
       default:
         break;
     }
@@ -145,8 +185,30 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
 
 void moveAxis(int8_t pan, int8_t tilt) {
   Serial.printf("Move axis: %d | %d\n", pan, tilt);
-  stepperList[0].stepper.setSpeed(map(pan, -0x7F, 0x7F, -stepperList[0].vMax, stepperList[0].vMax));
-  stepperList[1].stepper.setSpeed(map(tilt, -0x7F, 0x7F, -stepperList[1].vMax, stepperList[1].vMax));
+
+  if (pan == 0) {
+    stepperList[0].state = StepperHandle::State::STOP;
+  } else {
+    stepperList[0].stepper.setSpeed(map(pan, -0x7F, 0x7F, -stepperList[0].vMax, stepperList[0].vMax));
+    stepperList[0].state = StepperHandle::State::SPEED;
+  }
+
+  if (tilt == 0) {
+    stepperList[1].state = StepperHandle::State::STOP;
+  } else {
+    stepperList[1].stepper.setSpeed(map(tilt, -0x7F, 0x7F, -stepperList[1].vMax, stepperList[1].vMax));
+    stepperList[1].state = StepperHandle::State::SPEED;
+  }
+
+  Serial.printf("Axis speed: %f | %f\n", stepperList[0].stepper.speed(), stepperList[1].stepper.speed());
+}
+
+void moveToPosition(StepperPosition panPos, StepperPosition tiltPos) {
+  Serial.printf("Move to position: %d | %d\n", panPos.steps, tiltPos.steps);
+  stepperList[0].stepper.moveTo(panPos.steps);
+  stepperList[0].state = StepperHandle::State::TARGET;
+  stepperList[1].stepper.moveTo(tiltPos.steps);
+  stepperList[1].state = StepperHandle::State::TARGET;
 }
 
 void sendAxisPosition(WiFiClient& client, byte cmd) {
