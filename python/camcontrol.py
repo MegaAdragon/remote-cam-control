@@ -13,9 +13,9 @@ screen = pygame.display.set_mode((800, 600))
 def handle_recv(data):
     data = data.split(b'\xFF')
     for msg in data:
-        if len(msg) == 10 and msg[0] == 0x01 and msg[1] == 0x0A:
-            panPos = int.from_bytes(bytearray([msg[2] + msg[3], msg[4] + msg[5]]), byteorder='big')
-            tiltPos = int.from_bytes(bytearray([msg[6] + msg[7], msg[8] + msg[9]]), byteorder='big')
+        if len(msg) == 18 and msg[0] == 0x01 and msg[1] == 0x0A:
+            panPos = int.from_bytes(bytearray([msg[2] + msg[3], msg[4] + msg[5], msg[6] + msg[7], msg[8] + msg[9]]), byteorder='little', signed=True)
+            tiltPos = int.from_bytes(bytearray([msg[10] + msg[11], msg[12] + msg[13], msg[14] + msg[15], msg[16] + msg[17]]), byteorder='little', signed=True)
             print("pos:", panPos, tiltPos)
 
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
             pygame.display.flip()
 
             try:
-                data = s.recv(16)
+                data = s.recv(32)
                 handle_recv(data)
             except socket.error:
                 '''no data yet..'''

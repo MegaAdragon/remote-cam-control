@@ -1,5 +1,6 @@
-#include <ESP8266WiFi.h>
+#include <assert.h>
 #include <AccelStepper.h>
+#include <ESP8266WiFi.h>
 
 // TODO: add some kind of configuration mechanism here
 const char* ssid = "";
@@ -12,8 +13,8 @@ WiFiServer wifiServer(80);  // TCP socket server on port 80
 */
 typedef union
 {
-  uint16_t steps;
-  byte data[2];  // little endian
+  int32_t steps;
+  byte data[4];  // little endian
 } StepperPosition;
 
 /*
@@ -23,6 +24,7 @@ typedef struct {
   const char* name; // this is only for debug purposes
   const int vMax; // max speed
   const float acc;  // acceleration
+  const int enablePin;
   AccelStepper stepper;
 
   enum State {
@@ -35,19 +37,19 @@ typedef struct {
 StepperHandle stepperList[] {
   {
     .name = "Pan",
-    .vMax = 800,
-    .acc = 200.0f,
-    .stepper = AccelStepper (AccelStepper::DRIVER, 1, 2)
+    .vMax = 1000,
+    .acc = 1000.0f,
+    .enablePin = 14,
+    .stepper = AccelStepper (AccelStepper::DRIVER, 5, 4)  // D1 -> STEP, D2 -> DIR
   },
   {
     .name = "Tilt",
-    .vMax = 800,
-    .acc = 200.0f,
-    .stepper = AccelStepper (AccelStepper::DRIVER, 3, 4)
+    .vMax = 1000,
+    .acc = 1000.0f,
+    .enablePin = 12,
+    .stepper = AccelStepper (AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
   }
 };
-
-#define EN_PIN    0 //enable (CFG6) - One pin for all drivers
 
 void setup() {
   Serial.begin(115200);
@@ -72,12 +74,10 @@ void setup() {
     stepperList[i].stepper.setMaxSpeed(stepperList[i].vMax);
     Serial.printf("Acceleration: %d\n", stepperList[i].acc);
     stepperList[i].stepper.setAcceleration(stepperList[i].acc);
+
+    digitalWrite(stepperList[i].enablePin, HIGH); // activate driver (LOW active)
+    pinMode(stepperList[i].enablePin, OUTPUT);
   }
-
-  digitalWrite(EN_PIN, LOW); // activate driver (LOW active)
-  pinMode(EN_PIN, OUTPUT);
-
-  // TODO: move to home and call setCurrentPosition()
 }
 
 void loop() {
@@ -88,15 +88,13 @@ void loop() {
       commHandler(client);  // handle incoming data
 
       for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
-        if (stepperList[i].stepper.currentPosition() == 0 && stepperList[i].stepper.speed() < 0.0f) {
-          stepperList[i].state = StepperHandle::State::STOP;
-        }
-
         switch (stepperList[i].state) {
           case StepperHandle::State::SPEED: // move stepper with constant speed
+            digitalWrite(stepperList[i].enablePin, LOW);
             stepperList[i].stepper.runSpeed();
             break;
           case StepperHandle::State::TARGET:  // move stepper to target position (with acceleration + decceleration)
+            digitalWrite(stepperList[i].enablePin, LOW);
             if (!stepperList[i].stepper.run()) {
               stepperList[i].state = StepperHandle::State::STOP; // stepper reached target -> stop
             }
@@ -110,6 +108,7 @@ void loop() {
             */
             stepperList[i].stepper.stop();
             stepperList[i].stepper.setSpeed(0);
+            digitalWrite(stepperList[i].enablePin, HIGH);
             break;
           default:
             // nothing to do
@@ -217,20 +216,36 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
   panPos.steps = stepperList[0].stepper.currentPosition();
   tiltPos.steps = stepperList[1].stepper.currentPosition();
 
-  byte resp[16];  // response buffer
+  byte resp[20];  // response buffer
   byte idx = 0;
   resp[idx++] = 0x01; // module ID: axis controller
   resp[idx++] = cmd;
-  // encode 2 byte pan position into 4 bytes with padding
-  resp[idx++] = panPos.data[1] & 0xF0;
-  resp[idx++] = panPos.data[1] & 0x0F;
-  resp[idx++] = panPos.data[0] & 0xF0;
-  resp[idx++] = panPos.data[0] & 0x0F;
-  // encode 2 byte tilt position into 4 bytes with padding
-  resp[idx++] = tiltPos.data[1] & 0xF0;
-  resp[idx++] = tiltPos.data[1] & 0x0F;
-  resp[idx++] = tiltPos.data[0] & 0xF0;
-  resp[idx++] = tiltPos.data[0] & 0x0F;
+  // encode 4 byte pan position into 8 bytes with padding
+  idx += encodeStepperPosition(stepperList[0].stepper.currentPosition(), &resp[idx]);
+  // encode 4 byte tilt position into 8 bytes with padding
+  idx += encodeStepperPosition(stepperList[1].stepper.currentPosition(), &resp[idx]);
   resp[idx++] = 0xFF; // add delimiter
+  assert(idx < sizeof(resp));
   client.write(resp, idx);  // send response
+}
+
+/*
+   Encode stepper position into byte buffer.
+   Return number of encoded bytes.
+*/
+int encodeStepperPosition(long steps, byte data[]) {
+  StepperPosition pos;
+  pos.steps = steps;
+
+  byte idx;
+  for (idx = 0; idx < sizeof(pos.steps) * 2; idx++)
+  {
+    if (idx % 2 == 0) {
+      data[idx] = pos.data[idx / 2] & 0xF0;
+    } else {
+      data[idx] = pos.data[idx / 2] & 0x0F;
+    }
+  }
+
+  return idx;
 }
