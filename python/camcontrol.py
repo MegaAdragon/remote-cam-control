@@ -19,6 +19,15 @@ def handle_recv(data):
             print("pos:", panPos, tiltPos)
 
 
+def encode_stepper_pos(data, pos):
+    posData = pos.to_bytes(4, byteorder='little', signed=True)
+    for idx in range(0, 4 * 2):
+        if idx % 2 == 0:
+            data.append(posData[int(idx / 2)] & 0xF0)
+        else:
+            data.append(posData[int(idx / 2)] & 0x0F)
+
+
 # FIXME: add a class to hide this
 joystick = None
 req_pan_speed = 0
@@ -98,7 +107,11 @@ if __name__ == '__main__':
 
             pressed_keys = pygame.key.get_pressed()
             if pressed_keys[K_h]:
-                s.sendall(bytearray([0x01, 0x01, 0xFF])) # set pan + tilt to 0
+                data = bytearray([0x01, 0x01])
+                encode_stepper_pos(data, 100)
+                encode_stepper_pos(data, 200)
+                data.append(0xFF)
+                s.sendall(data) # set pan + tilt to 0
 
             # poll the current axis position
             s.sendall(bytearray([0x01, 0x0A, 0xFF]))

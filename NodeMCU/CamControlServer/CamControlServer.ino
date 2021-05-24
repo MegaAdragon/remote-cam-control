@@ -123,7 +123,7 @@ void loop() {
 }
 
 void commHandler(WiFiClient& client) {
-  static byte buf[16];
+  static byte buf[32];
   static int idx = 0;
 
   // read all incoming byte into buffer
@@ -132,7 +132,8 @@ void commHandler(WiFiClient& client) {
     buf[idx] = b;
     idx++;
 
-    if (idx >= 16) {
+    if (idx >= sizeof(buf)) {
+      assert(false);
       idx = 0; // overflow -> this should never happen
       Serial.println("Error: overflow");
     }
@@ -167,11 +168,12 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
         moveAxis(data[2], data[3]);
         break;
       case 0x01:
-        // TODO: add position arguments
-        StepperPosition panPos, tiltPos;
-        panPos.steps = 0;
-        tiltPos.steps = 0;
-        moveToPosition(panPos, tiltPos);
+        if (length != 19) {
+          break;
+        }
+
+        // 4 byte stepper position is encoded into 8 bytes with padding
+        moveToPosition(decodeStepperPos(&data[2]), decodeStepperPos(&data[10]));
         break;
       case 0x0A:  // get axis position
         sendAxisPosition(client, cmd);
@@ -202,11 +204,11 @@ void moveAxis(int8_t pan, int8_t tilt) {
   Serial.printf("Axis speed: %f | %f\n", stepperList[0].stepper.speed(), stepperList[1].stepper.speed());
 }
 
-void moveToPosition(StepperPosition panPos, StepperPosition tiltPos) {
-  Serial.printf("Move to position: %d | %d\n", panPos.steps, tiltPos.steps);
-  stepperList[0].stepper.moveTo(panPos.steps);
+void moveToPosition(long panPos, long tiltPos) {
+  Serial.printf("Move to position: %d | %d\n", panPos, tiltPos);
+  stepperList[0].stepper.moveTo(panPos);
   stepperList[0].state = StepperHandle::State::TARGET;
-  stepperList[1].stepper.moveTo(tiltPos.steps);
+  stepperList[1].stepper.moveTo(tiltPos);
   stepperList[1].state = StepperHandle::State::TARGET;
 }
 
@@ -221,9 +223,9 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
   resp[idx++] = 0x01; // module ID: axis controller
   resp[idx++] = cmd;
   // encode 4 byte pan position into 8 bytes with padding
-  idx += encodeStepperPosition(stepperList[0].stepper.currentPosition(), &resp[idx]);
+  idx += encodeStepperPos(stepperList[0].stepper.currentPosition(), &resp[idx]);
   // encode 4 byte tilt position into 8 bytes with padding
-  idx += encodeStepperPosition(stepperList[1].stepper.currentPosition(), &resp[idx]);
+  idx += encodeStepperPos(stepperList[1].stepper.currentPosition(), &resp[idx]);
   resp[idx++] = 0xFF; // add delimiter
   assert(idx < sizeof(resp));
   client.write(resp, idx);  // send response
@@ -233,7 +235,7 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
    Encode stepper position into byte buffer.
    Return number of encoded bytes.
 */
-int encodeStepperPosition(long steps, byte data[]) {
+int encodeStepperPos(long steps, byte data[]) {
   StepperPosition pos;
   pos.steps = steps;
 
@@ -248,4 +250,16 @@ int encodeStepperPosition(long steps, byte data[]) {
   }
 
   return idx;
+}
+
+/*
+   Decode stepper position from byte buffer.
+*/
+long decodeStepperPos(byte data[]) {
+  StepperPosition pos;
+  pos.data[0] = data[0] + data[1];
+  pos.data[1] = data[2] + data[3];
+  pos.data[2] = data[4] + data[5];
+  pos.data[3] = data[6] + data[7];
+  return pos.steps;
 }
