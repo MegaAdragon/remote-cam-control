@@ -24,7 +24,6 @@ typedef struct {
   const char* name; // this is only for debug purposes
   const int vMax; // max speed
   const float acc;  // acceleration
-  const int enablePin;
   AccelStepper stepper;
 
   enum State {
@@ -39,17 +38,18 @@ StepperHandle stepperList[] {
     .name = "Pan",
     .vMax = 1000,
     .acc = 1000.0f,
-    .enablePin = 14,
-    .stepper = AccelStepper (AccelStepper::DRIVER, 5, 4)  // D1 -> STEP, D2 -> DIR
+    .stepper = AccelStepper (AccelStepper::DRIVER, 16, 4)  // D0 -> STEP, D2 -> DIR
   },
   {
     .name = "Tilt",
     .vMax = 1000,
     .acc = 1000.0f,
-    .enablePin = 12,
     .stepper = AccelStepper (AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
   }
 };
+
+const int enablePin = 5;  // D1
+const int disableTimeout = 10;  // motor output is disabled after this timeout (in ms)
 
 void setup() {
   Serial.begin(115200);
@@ -74,46 +74,53 @@ void setup() {
     stepperList[i].stepper.setMaxSpeed(stepperList[i].vMax);
     Serial.printf("Acceleration: %d\n", stepperList[i].acc);
     stepperList[i].stepper.setAcceleration(stepperList[i].acc);
-
-    digitalWrite(stepperList[i].enablePin, HIGH); // activate driver (LOW active)
-    pinMode(stepperList[i].enablePin, OUTPUT);
   }
+
+  // initialize the motor output enable pin (LOW active)
+  digitalWrite(enablePin, HIGH);
+  pinMode(enablePin, OUTPUT);
 }
 
 void loop() {
   WiFiClient client = wifiServer.available();
 
   if (client) {
+    Serial.print("Connected to client:");
+    Serial.println(WiFi.localIP());
+
     while (client.connected()) {
       commHandler(client);  // handle incoming data
 
+      static long lastStepTick;
       for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+        // if motor not stopped -> enable driver output
+        if (stepperList[i].state != StepperHandle::State::STOP) {
+          digitalWrite(enablePin, LOW);
+          lastStepTick = millis();
+        }
+        
         switch (stepperList[i].state) {
           case StepperHandle::State::SPEED: // move stepper with constant speed
-            digitalWrite(stepperList[i].enablePin, LOW);
             stepperList[i].stepper.runSpeed();
             break;
           case StepperHandle::State::TARGET:  // move stepper to target position (with acceleration + decceleration)
-            digitalWrite(stepperList[i].enablePin, LOW);
             if (!stepperList[i].stepper.run()) {
               stepperList[i].state = StepperHandle::State::STOP; // stepper reached target -> stop
             }
             break;
           case StepperHandle::State::STOP:
-            /*
-               TODO:
-               Not 100% sure why this extra state is neccessary.
-               Somehow, setting the speed to 0 causes the moveTo() to get stuck.
-               With this separate state I can make sure to always reset the target position and the speed.
-            */
             stepperList[i].stepper.stop();
             stepperList[i].stepper.setSpeed(0);
-            digitalWrite(stepperList[i].enablePin, HIGH);
             break;
           default:
             // nothing to do
             break;
         }
+      }
+
+      // all motors stopped longer than timeout -> disable motor driver output
+      if (millis() - lastStepTick > disableTimeout) {
+        digitalWrite(enablePin, HIGH);
       }
     }
 
@@ -164,10 +171,10 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
 
   if (moduleId == 0x01) { // axis controller
     switch (cmd) {
-      case 0x00:  // move (pan + tilt)
+      case 0x00:  // move with given speed (pan + tilt)
         moveAxis(data[2], data[3]);
         break;
-      case 0x01:
+      case 0x01:  // move to position (pan + tilt)
         if (length != 19) {
           break;
         }
@@ -253,7 +260,7 @@ int encodeStepperPos(long steps, byte data[]) {
 }
 
 /*
-   Decode stepper position from byte buffer.
+   Decode stepper position from byte buffer
 */
 long decodeStepperPos(byte data[]) {
   StepperPosition pos;
