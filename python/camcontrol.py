@@ -103,18 +103,30 @@ if __name__ == '__main__':
     joystick = joystick.Joystick(bHandler)
     joystick.init()
 
-    pads = ['Back', 'A', 'B', 'C', 'D', 'Enter']
-    for pad in pads:
-        touchphat.set_led(pad, True)
-        time.sleep(0.1)
-    time.sleep(0.2)
-    for pad in pads[::-1]:
-        touchphat.set_led(pad, False)
-        time.sleep(0.1)
+    while True:
+        while True:  # wait for server socket
+            try:
+                touchphat.all_on()
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1)
+                s.connect((HOST, PORT))
+                s.setblocking(False)
+                break
+            except socket.error:
+                touchphat.all_off()
+                time.sleep(1)
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.setblocking(False)
+        print("Connected to camera controller")
+        touchphat.all_off()
+
+        pads = ['Back', 'A', 'B', 'C', 'D', 'Enter']
+        for pad in pads:
+            touchphat.set_led(pad, True)
+            time.sleep(0.1)
+        time.sleep(0.2)
+        for pad in pads[::-1]:
+            touchphat.set_led(pad, False)
+            time.sleep(0.1)
 
         running = True
         while running:
@@ -134,13 +146,18 @@ if __name__ == '__main__':
                 data += bytearray([0xFF])
                 s.sendall(data)
 
-            # poll the current axis position
-            s.sendall(bytearray([0x01, 0x0A, 0xFF]))
+            try:
+                # poll the current axis position
+                s.sendall(bytearray([0x01, 0x0A, 0xFF]))
+            except socket.error:
+                print("lost connection")
+                running = False
 
             try:
                 data = s.recv(32)
                 handle_recv(data)
             except socket.error:
                 '''no data yet..'''
+                pass
 
             time.sleep(0.1)

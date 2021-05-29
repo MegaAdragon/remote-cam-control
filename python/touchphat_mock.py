@@ -12,3 +12,11 @@ def on_release(pad, handler=None):
 
 def set_led(pad, value):
     pass
+
+
+def all_off():
+    pass
+
+
+def all_on():
+    pass
