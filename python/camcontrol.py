@@ -1,10 +1,12 @@
 import socket
+import sys
 import time
 import pygame
 import button_handler
 import joystick
 import led_handler
 import argparse
+import signal
 
 try:
     import touchphat
@@ -113,6 +115,15 @@ def handle_restart(key):
     # TODO: reset everything
 
 
+def shutdown_handler(signo, stack_frame):
+    if s is not None:
+        s.close()
+    sys.exit()
+
+
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--server', '-s', help='set server address', required=True)
@@ -141,6 +152,7 @@ if __name__ == '__main__':
                 time.sleep(1)
 
         print("Connected to camera controller")
+        stop_all_axis(s)
         led_handler.startup()
 
         running = True
