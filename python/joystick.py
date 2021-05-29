@@ -42,6 +42,12 @@ class Joystick:
             return self._pan_speed, self._tilt_speed
         return None
 
+    def lock(self):
+        self._pan_speed = 0
+        self._tilt_speed = 0
+        self._updateAxis = True
+        self._lock = True
+
     def process(self):
         if self._joystick is None:
             return
@@ -61,10 +67,7 @@ class Joystick:
                 return
 
         if self._joystick.get_button(0):    # trigger button
-            self._pan_speed = 0
-            self._tilt_speed = 0
-            self._updateAxis = True
-            self._lock = True
+            self.lock()
             return
 
         for key in joystick_key_map:
@@ -72,10 +75,12 @@ class Joystick:
                 touchphat.set_led(key, True)
                 self._button_state[key] = True
                 self._button_handler.on_pressed(key)
+                return
             elif self._button_state[key] == True:  # button was pressed
                 touchphat.set_led(key, False)
                 self._button_state[key] = False
                 self._button_handler.on_released(key)
+                return
 
         pan_speed = round(0x7F * x_axis)
         tilt_speed = round(0x7F * y_axis)

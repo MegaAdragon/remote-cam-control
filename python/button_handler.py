@@ -55,6 +55,8 @@ class ButtonHandler:
         button = self._get_button(key)
         if button is None:
             return
+        if button['state'] == 'Pressed' and 'on_press' in button:
+            button['on_press'](button['key'])
         button['state'] = 'Released'
 
     def process(self):
@@ -63,8 +65,6 @@ class ButtonHandler:
             if button['state'] == 'Start':
                 if current_time - button['pressStart'] > 0.2:
                     button['state'] = 'Pressed'
-                    if 'on_press' in button:
-                        button['on_press'](button['key'])
             elif button['state'] == 'Pressed':
                 if current_time - button['pressStart'] > 1.5:
                     button['state'] = 'LongPressed'

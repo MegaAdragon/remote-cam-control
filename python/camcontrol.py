@@ -38,7 +38,6 @@ def encode_stepper_pos(data, pos):
 
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 
-sock = None
 storedPositions = {}
 
 
@@ -56,6 +55,7 @@ def handle_release(event):
 def handle_press(key):
     print("on_press", key)
     if key in storedPositions:
+        joystick.lock()
         print("Go to stored position", key, storedPositions[key][0], storedPositions[key][1])
         data = bytearray([0x01, 0x01])
         encode_stepper_pos(data, storedPositions[key][0])
@@ -67,6 +67,7 @@ def handle_press(key):
 @bHandler.on_long_press(['A', 'B', 'C', 'D'])
 def handle_long_press(key):
     print("on_long_press", key)
+    joystick.lock()
 
     # fast blink
     for i in range(0, 5):
@@ -114,7 +115,6 @@ if __name__ == '__main__':
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.setblocking(False)
-        sock = s
 
         running = True
         while running:
