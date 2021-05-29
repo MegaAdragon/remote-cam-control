@@ -4,15 +4,13 @@ import pygame
 import button_handler
 import joystick
 import led_handler
+import argparse
 
 try:
     import touchphat
 except ImportError:
     print("Touch PHAT not supported")
     import touchphat_mock as touchphat
-
-HOST = '192.168.0.117'  # The server's hostname or IP address
-PORT = 80  # The port used by the server
 
 def handle_recv(data):
     data = data.split(b'\xFF')
@@ -69,7 +67,7 @@ def stop_all_axis(sock):
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 led_handler = led_handler.LedHandler()
 
-storedPositions = {}
+stored_positions = {}
 
 
 @touchphat.on_touch(['Back', 'A', 'B', 'C', 'D'])
@@ -116,6 +114,15 @@ def handle_restart(key):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--server', '-s', help='set server address', required=True)
+    parser.add_argument('--port', '-p', type=int, help='set the server port', default=80)
+    parser.add_argument('--debug', '-d', action='store_true', help='run server in debug mode')
+    args = parser.parse_args()
+
+    if args.debug:
+        print("debug mode")
+
     pygame.init()
     joystick = joystick.Joystick(bHandler)
     joystick.init()
@@ -126,7 +133,7 @@ if __name__ == '__main__':
                 touchphat.all_on()
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(1)
-                s.connect((HOST, PORT))
+                s.connect((args.server, args.port))
                 s.setblocking(False)
                 break
             except socket.error:
@@ -168,7 +175,8 @@ if __name__ == '__main__':
 
                 if resp is not None:
                     if resp['param'][0] != 0 or resp['param'][1] != 0:
-                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
+                        if args.debug:
+                            s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
                     if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
                         led_handler.start_blink()
                     if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
