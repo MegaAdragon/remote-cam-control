@@ -2,17 +2,16 @@ import socket
 import time
 import pygame
 import button_handler
+import joystick
 
 try:
     import touchphat
 except ImportError:
     print("Touch PHAT not supported")
+    import touchphat_mock as touchphat
 
 HOST = '192.168.0.117'  # The server's hostname or IP address
 PORT = 80  # The port used by the server
-
-pygame.init()
-screen = pygame.display.set_mode((800, 600))
 
 
 def handle_recv(data):
@@ -37,78 +36,7 @@ def encode_stepper_pos(data, pos):
             data.append(posData[int(idx / 2)] & 0x0F)
 
 
-# FIXME: add a class to hide this
-joystick = None
-req_pan_speed = 0
-req_tilt_speed = 0
-
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
-
-joystick_key_map = {
-    'A': 1,
-    'B': 2,
-    'C': 3,
-    'D': 4,
-}
-
-joystick_button_state = {
-    'A': False,
-    'B': False,
-    'C': False,
-    'D': False
-}
-
-
-def handle_joystick():
-    global joystick
-    if joystick is None:
-        return
-
-    x_axis = joystick.get_axis(0)
-    y_axis = -joystick.get_axis(1)
-
-    if abs(x_axis) < 0.05:
-        x_axis = 0
-    if abs(y_axis) < 0.05:
-        y_axis = 0
-
-    pan_speed = round(0x7F * x_axis)
-    tilt_speed = round(0x7F * y_axis)
-
-    for key in joystick_key_map:
-        if joystick.get_button(joystick_key_map[key]):
-            touchphat.set_led(key, True)
-            joystick_button_state[key] = True
-            bHandler.on_pressed(key)
-        elif joystick_button_state[key] == True:    # button was pressed
-            touchphat.set_led(key, False)
-            joystick_button_state[key] = False
-            bHandler.on_released(key)
-
-    global req_pan_speed
-    global req_tilt_speed
-
-    if pan_speed != req_pan_speed or tilt_speed != req_tilt_speed:
-        req_pan_speed = pan_speed
-        req_tilt_speed = tilt_speed
-        # 01 00 xx yy FF
-        data = bytearray([0x01, 0x00])
-        data += pan_speed.to_bytes(1, byteorder='big', signed=True)
-        data += tilt_speed.to_bytes(1, byteorder='big', signed=True)
-        data += bytearray([0xFF])
-        s.sendall(data)
-
-
-def init_joystick():
-    if pygame.joystick.get_count() < 1:
-        return
-
-    global joystick
-    joystick = pygame.joystick.Joystick(0)
-    joystick.init()
-    print("Joystick: " + joystick.get_name())
-    print("Number of axes: " + str(joystick.get_numaxes()))
-
 
 sock = None
 storedPositions = {}
@@ -170,7 +98,9 @@ def handle_restart(key):
 
 
 if __name__ == '__main__':
-    init_joystick()
+    pygame.init()
+    joystick = joystick.Joystick(bHandler)
+    joystick.init()
 
     pads = ['Back', 'A', 'B', 'C', 'D', 'Enter']
     for pad in pads:
@@ -192,11 +122,17 @@ if __name__ == '__main__':
                 if event.type == pygame.QUIT:
                     running = False
 
-            screen.fill((0, 0, 0))
-            pygame.draw.circle(screen, (255, 0, 0), (400, 300), 200, 1)
-
-            handle_joystick()
+            joystick.process()
             bHandler.process()
+
+            axis_speed = joystick.get_axis_speed()
+            if axis_speed is not None:
+                # 01 00 xx yy FF
+                data = bytearray([0x01, 0x00])
+                data += axis_speed[0].to_bytes(1, byteorder='little', signed=True)
+                data += axis_speed[1].to_bytes(1, byteorder='little', signed=True)
+                data += bytearray([0xFF])
+                s.sendall(data)
 
             # poll the current axis position
             s.sendall(bytearray([0x01, 0x0A, 0xFF]))
