@@ -85,7 +85,7 @@ void loop() {
   WiFiClient client = wifiServer.available();
 
   if (client) {
-    Serial.print("Connected to client:");
+    Serial.print("Connected to client: ");
     Serial.println(WiFi.localIP());
 
     while (client.connected()) {
@@ -98,7 +98,7 @@ void loop() {
           digitalWrite(enablePin, LOW);
           lastStepTick = millis();
         }
-        
+
         switch (stepperList[i].state) {
           case StepperHandle::State::SPEED: // move stepper with constant speed
             stepperList[i].stepper.runSpeed();
@@ -182,12 +182,24 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
         // 4 byte stepper position is encoded into 8 bytes with padding
         moveToPosition(decodeStepperPos(&data[2]), decodeStepperPos(&data[10]));
         break;
+      case 0x02:
+        stopAllAxis();
+        break;
       case 0x0A:  // get axis position
         sendAxisPosition(client, cmd);
+        break;
+      case 0x0B:  // get axis state
+        sendAxisState(client, cmd);
         break;
       default:
         break;
     }
+  }
+}
+
+void stopAllAxis() {
+  for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+    stepperList[i].state = StepperHandle::State::STOP;
   }
 }
 
@@ -229,10 +241,28 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
   byte idx = 0;
   resp[idx++] = 0x01; // module ID: axis controller
   resp[idx++] = cmd;
-  // encode 4 byte pan position into 8 bytes with padding
-  idx += encodeStepperPos(stepperList[0].stepper.currentPosition(), &resp[idx]);
-  // encode 4 byte tilt position into 8 bytes with padding
-  idx += encodeStepperPos(stepperList[1].stepper.currentPosition(), &resp[idx]);
+
+  // encode 4 byte axis position into 8 bytes with padding
+  for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+    idx += encodeStepperPos(stepperList[i].stepper.currentPosition(), &resp[idx]);
+  }
+
+  resp[idx++] = 0xFF; // add delimiter
+  assert(idx < sizeof(resp));
+  client.write(resp, idx);  // send response
+}
+
+void sendAxisState(WiFiClient& client, byte cmd) {
+  byte resp[20];  // response buffer
+  byte idx = 0;
+  resp[idx++] = 0x01; // module ID: axis controller
+  resp[idx++] = cmd;
+
+  // add axis state to buffer
+  for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
+    resp[idx++] = stepperList[i].state;
+  }
+
   resp[idx++] = 0xFF; // add delimiter
   assert(idx < sizeof(resp));
   client.write(resp, idx);  // send response

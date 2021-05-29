@@ -45,7 +45,6 @@ class Joystick:
     def lock(self):
         self._pan_speed = 0
         self._tilt_speed = 0
-        self._updateAxis = True
         self._lock = True
 
     def process(self):
@@ -68,6 +67,7 @@ class Joystick:
 
         if self._joystick.get_button(0):    # trigger button
             self.lock()
+            self._updateAxis = True
             return
 
         for key in joystick_key_map:

@@ -16,6 +16,7 @@ PORT = 80  # The port used by the server
 
 def handle_recv(data):
     data = data.split(b'\xFF')
+    results = []
     for msg in data:
         if len(msg) == 18 and msg[0] == 0x01 and msg[1] == 0x0A:
             panPos = int.from_bytes(bytearray([msg[2] + msg[3], msg[4] + msg[5], msg[6] + msg[7], msg[8] + msg[9]]),
@@ -24,7 +25,31 @@ def handle_recv(data):
                 bytearray([msg[10] + msg[11], msg[12] + msg[13], msg[14] + msg[15], msg[16] + msg[17]]),
                 byteorder='little', signed=True)
             print("pos:", panPos, tiltPos)
-            return [0x01, 0x0A], panPos, tiltPos
+            results.append({'header': [msg[0], msg[1]], 'param': [panPos, tiltPos]})
+        if len(msg) == 4 and msg[0] == 0x01 and msg[1] == 0x0B:
+            results.append({'header': [msg[0], msg[1]], 'param': [msg[2], msg[3]]})
+    return results
+
+
+def check_for_resp(data, header):
+    results = handle_recv(data)
+    if results is None or len(results) == 0:
+        return
+    for r in results:
+        if r['header'] == header:
+            return r
+
+
+def wait_for_resp(sock, header):
+    # TODO: use timeout
+    while True:
+        try:
+            data = sock.recv(32)
+            resp = check_for_resp(data, header)
+            if resp is not None:
+               return resp
+        except socket.error:
+            '''no data yet..'''
 
 
 def encode_stepper_pos(data, pos):
@@ -34,6 +59,11 @@ def encode_stepper_pos(data, pos):
             data.append(posData[int(idx / 2)] & 0xF0)
         else:
             data.append(posData[int(idx / 2)] & 0x0F)
+
+
+def stop_all_axis(sock):
+    sock.sendall(bytearray([0x01, 0x02, 0xFF]))
+    joystick.lock()
 
 
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
@@ -55,7 +85,7 @@ def handle_release(event):
 def handle_press(key):
     print("on_press", key)
     if key in storedPositions:
-        joystick.lock()
+        stop_all_axis(s)
         print("Go to stored position", key, storedPositions[key][0], storedPositions[key][1])
         data = bytearray([0x01, 0x01])
         encode_stepper_pos(data, storedPositions[key][0])
@@ -67,7 +97,7 @@ def handle_press(key):
 @bHandler.on_long_press(['A', 'B', 'C', 'D'])
 def handle_long_press(key):
     print("on_long_press", key)
-    joystick.lock()
+    stop_all_axis(s)
 
     # fast blink
     for i in range(0, 5):
@@ -78,18 +108,9 @@ def handle_long_press(key):
 
     # poll the current axis position
     s.sendall(bytearray([0x01, 0x0A, 0xFF]))
-
-    # TODO: use timeout
-    while True:
-        try:
-            data = s.recv(32)
-            result = handle_recv(data)
-            if result is not None and result[0][0] == 0x01 and result[0][1] == 0x0A:
-                print("store", key, result[1], result[2])
-                storedPositions[key] = [result[1], result[2]]
-                break
-        except socket.error:
-            '''no data yet..'''
+    resp = wait_for_resp(s, [0x01, 0x0A])
+    print("store", key, resp['param'][0], resp['param'][1])
+    storedPositions[key] = resp['param']
 
 
 @bHandler.on_long_press(['Back'])
@@ -147,15 +168,20 @@ if __name__ == '__main__':
                 s.sendall(data)
 
             try:
-                # poll the current axis position
-                s.sendall(bytearray([0x01, 0x0A, 0xFF]))
+                # poll the current axis state
+                s.sendall(bytearray([0x01, 0x0B, 0xFF]))
             except socket.error:
                 print("lost connection")
                 running = False
 
             try:
-                data = s.recv(32)
-                handle_recv(data)
+                data = s.recv(128)
+                resp = check_for_resp(data, [0x01, 0x0B])
+
+                if resp is not None:
+                    if resp['param'][0] == 1 or resp['param'][1] == 1:
+                        # poll the current axis position
+                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))
             except socket.error:
                 '''no data yet..'''
                 pass
