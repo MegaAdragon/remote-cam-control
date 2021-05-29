@@ -21,6 +21,7 @@ class Joystick:
         self._pan_speed = 0.0
         self._tilt_speed = 0.0
         self._updateAxis = False
+        self._lock = False
         self._button_state = {}
         for key in joystick_key_map:
             self._button_state[key] = False
@@ -53,8 +54,18 @@ class Joystick:
         if abs(y_axis) < 0.05:
             y_axis = 0
 
-        pan_speed = round(0x7F * x_axis)
-        tilt_speed = round(0x7F * y_axis)
+        if self._lock:
+            if x_axis == 0 and y_axis == 0:
+                self._lock = False
+            else:
+                return
+
+        if self._joystick.get_button(0):    # trigger button
+            self._pan_speed = 0
+            self._tilt_speed = 0
+            self._updateAxis = True
+            self._lock = True
+            return
 
         for key in joystick_key_map:
             if self._joystick.get_button(joystick_key_map[key]):
@@ -65,6 +76,9 @@ class Joystick:
                 touchphat.set_led(key, False)
                 self._button_state[key] = False
                 self._button_handler.on_released(key)
+
+        pan_speed = round(0x7F * x_axis)
+        tilt_speed = round(0x7F * y_axis)
 
         if pan_speed != self._pan_speed or tilt_speed != self._tilt_speed:
             self._pan_speed = pan_speed
