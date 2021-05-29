@@ -3,6 +3,7 @@ import time
 import pygame
 import button_handler
 import joystick
+import led_handler
 
 try:
     import touchphat
@@ -12,7 +13,6 @@ except ImportError:
 
 HOST = '192.168.0.117'  # The server's hostname or IP address
 PORT = 80  # The port used by the server
-
 
 def handle_recv(data):
     data = data.split(b'\xFF')
@@ -47,9 +47,9 @@ def wait_for_resp(sock, header):
             data = sock.recv(32)
             resp = check_for_resp(data, header)
             if resp is not None:
-               return resp
+                return resp
         except socket.error:
-            '''no data yet..'''
+            pass  # no data yet
 
 
 def encode_stepper_pos(data, pos):
@@ -67,6 +67,7 @@ def stop_all_axis(sock):
 
 
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
+led_handler = led_handler.LedHandler()
 
 storedPositions = {}
 
@@ -84,33 +85,28 @@ def handle_release(event):
 @bHandler.on_press(['A', 'B', 'C', 'D'])
 def handle_press(key):
     print("on_press", key)
-    if key in storedPositions:
+    if key in stored_positions:
         stop_all_axis(s)
-        print("Go to stored position", key, storedPositions[key][0], storedPositions[key][1])
+        print("Go to stored position", key, stored_positions[key][0], stored_positions[key][1])
         data = bytearray([0x01, 0x01])
-        encode_stepper_pos(data, storedPositions[key][0])
-        encode_stepper_pos(data, storedPositions[key][1])
+        encode_stepper_pos(data, stored_positions[key][0])
+        encode_stepper_pos(data, stored_positions[key][1])
         data.append(0xFF)
         s.sendall(data)
+        led_handler.set_selected(key)
 
 
 @bHandler.on_long_press(['A', 'B', 'C', 'D'])
 def handle_long_press(key):
     print("on_long_press", key)
     stop_all_axis(s)
-
-    # fast blink
-    for i in range(0, 5):
-        touchphat.set_led(key, True)
-        time.sleep(0.1)
-        touchphat.set_led(key, False)
-        time.sleep(0.1)
+    led_handler.confirm(key)
 
     # poll the current axis position
     s.sendall(bytearray([0x01, 0x0A, 0xFF]))
     resp = wait_for_resp(s, [0x01, 0x0A])
     print("store", key, resp['param'][0], resp['param'][1])
-    storedPositions[key] = resp['param']
+    stored_positions[key] = resp['param']
 
 
 @bHandler.on_long_press(['Back'])
@@ -138,16 +134,7 @@ if __name__ == '__main__':
                 time.sleep(1)
 
         print("Connected to camera controller")
-        touchphat.all_off()
-
-        pads = ['Back', 'A', 'B', 'C', 'D', 'Enter']
-        for pad in pads:
-            touchphat.set_led(pad, True)
-            time.sleep(0.1)
-        time.sleep(0.2)
-        for pad in pads[::-1]:
-            touchphat.set_led(pad, False)
-            time.sleep(0.1)
+        led_handler.startup()
 
         running = True
         while running:
@@ -157,6 +144,7 @@ if __name__ == '__main__':
 
             joystick.process()
             bHandler.process()
+            led_handler.process()
 
             axis_speed = joystick.get_axis_speed()
             if axis_speed is not None:
@@ -179,11 +167,13 @@ if __name__ == '__main__':
                 resp = check_for_resp(data, [0x01, 0x0B])
 
                 if resp is not None:
-                    if resp['param'][0] == 1 or resp['param'][1] == 1:
-                        # poll the current axis position
-                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))
+                    if resp['param'][0] != 0 or resp['param'][1] != 0:
+                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
+                    if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
+                        led_handler.start_blink()
+                    if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
+                        led_handler.stop_blink()
             except socket.error:
-                '''no data yet..'''
-                pass
+                pass  # no data yet
 
             time.sleep(0.1)
