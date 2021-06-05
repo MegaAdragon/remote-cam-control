@@ -4,10 +4,11 @@ import time
 import pygame
 import button_handler
 import joystick
-import led_handler
+import pad_handler
 import argparse
 import signal
 import statusdisplay
+import pad_display
 
 try:
     import touchphat
@@ -74,10 +75,8 @@ def stop_all_axis(sock):
     joystick.lock()
 
 
-bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
-led_handler = led_handler.LedHandler()
-
 stored_positions = {}
+bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 
 
 @touchphat.on_touch(['Back', 'A', 'B', 'C', 'D'])
@@ -101,14 +100,14 @@ def handle_press(key):
         encode_stepper_pos(data, stored_positions[key][1])
         data.append(0xFF)
         s.sendall(data)
-        led_handler.set_selected(key)
+        pad_handler.set_selected(key)
 
 
 @bHandler.on_long_press(['A', 'B', 'C', 'D'])
 def handle_long_press(key):
     print("on_long_press", key)
     stop_all_axis(s)
-    led_handler.confirm(key)
+    pad_handler.confirm(key)
 
     # poll the current axis position
     s.sendall(bytearray([0x01, 0x0A, 0xFF]))
@@ -142,14 +141,17 @@ if __name__ == '__main__':
     if args.debug:
         print("debug mode")
 
+    serial = [i2c(port=1, address=0x3C), i2c(port=1, address=0x3D)]
+
+    pad_display = pad_display.PadDisplay(ssd1306(serial[1]))
+
+    pad_handler = pad_handler.PadHandler(display=pad_display)
+
     pygame.init()
-    joystick = joystick.Joystick(bHandler)
+    joystick = joystick.Joystick(bHandler, pad_handler)
     joystick.init()
 
-    serial = i2c(port=1, address=0x3C)
-    device = ssd1306(serial)
-    status_display = statusdisplay.StatusDisplay(device, joystick)
-    status_display.startup()
+    status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]), joystick)
 
     while True:
         while True:  # wait for server socket
@@ -166,11 +168,11 @@ if __name__ == '__main__':
 
         print("Connected to camera controller")
         stop_all_axis(s)
-        led_handler.startup()
 
         # TODO: add mechanism to support multiple cams
         cam = statusdisplay.CameraInfo(1)
         status_display.update(cam)
+        pad_handler.startup()
 
         running = True
         while running:
@@ -180,7 +182,7 @@ if __name__ == '__main__':
 
             joystick.process()
             bHandler.process()
-            led_handler.process()
+            pad_handler.process()
 
             axis_speed = joystick.get_axis_speed()
             if axis_speed is not None:
@@ -216,9 +218,9 @@ if __name__ == '__main__':
                         if args.debug:
                             s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
                     if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
-                        led_handler.start_blink()
+                        pad_handler.start_blink()
                     if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
-                        led_handler.stop_blink()
+                        pad_handler.stop_blink()
             except socket.error:
                 pass  # no data yet
 

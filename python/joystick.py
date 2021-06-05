@@ -15,9 +15,10 @@ joystick_key_map = {
 
 
 class Joystick:
-    def __init__(self, button_handler):
+    def __init__(self, button_handler, pad_handler):
         self._joystick = None
         self._button_handler = button_handler
+        self._pad_handler = pad_handler
         self._pan_speed = 0.0
         self._tilt_speed = 0.0
         self._updateAxis = False
@@ -76,12 +77,12 @@ class Joystick:
 
         for key in joystick_key_map:
             if self._joystick.get_button(joystick_key_map[key]):
-                touchphat.set_led(key, True)
+                self._pad_handler.set_pad(key, True)
                 self._button_state[key] = True
                 self._button_handler.on_pressed(key)
                 return
             elif self._button_state[key] == True:  # button was pressed
-                touchphat.set_led(key, False)
+                self._pad_handler.set_pad(key, False)
                 self._button_state[key] = False
                 self._button_handler.on_released(key)
                 return

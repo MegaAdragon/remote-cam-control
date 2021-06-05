@@ -25,7 +25,6 @@ class StatusDisplay:
         self._device = device
         self._joystick = joystick
 
-    def startup(self):
         img_path = 'dragonfly.png'
         logo = Image.open(img_path).convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
