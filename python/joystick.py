@@ -51,12 +51,14 @@ class Joystick:
         if self._joystick is None:
             return
 
-        x_axis = self._joystick.get_axis(0)
-        y_axis = -self._joystick.get_axis(1)
+        x_axis = self._joystick.get_axis(0) * ((-self._joystick.get_axis(2) + 1) / 2)
+        x_axis = x_axis * abs(x_axis)
+        y_axis = -self._joystick.get_axis(1) * ((-self._joystick.get_axis(2) + 1) / 2)
+        y_axis = y_axis * abs(y_axis)
 
-        if abs(x_axis) < 0.05:
+        if abs(x_axis) < 0.001:
             x_axis = 0
-        if abs(y_axis) < 0.05:
+        if abs(y_axis) < 0.001:
             y_axis = 0
 
         if self._lock:
@@ -82,8 +84,8 @@ class Joystick:
                 self._button_handler.on_released(key)
                 return
 
-        pan_speed = round(0x7F * x_axis)
-        tilt_speed = round(0x7F * y_axis)
+        pan_speed = round(0xFE * x_axis)
+        tilt_speed = round(0xFE * y_axis)
 
         if pan_speed != self._pan_speed or tilt_speed != self._tilt_speed:
             self._pan_speed = pan_speed

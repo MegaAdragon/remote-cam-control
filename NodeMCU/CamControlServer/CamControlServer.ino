@@ -36,20 +36,20 @@ typedef struct {
 StepperHandle stepperList[] {
   {
     .name = "Pan",
-    .vMax = 1000,
+    .vMax = 750,
     .acc = 1000.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 16, 4)  // D0 -> STEP, D2 -> DIR
   },
   {
     .name = "Tilt",
-    .vMax = 1000,
+    .vMax = 750,
     .acc = 1000.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
   }
 };
 
 const int enablePin = 5;  // D1
-const int disableTimeout = 10;  // motor output is disabled after this timeout (in ms)
+const int disableTimeout = 100;  // motor output is disabled after this timeout (in ms)
 
 void setup() {
   Serial.begin(115200);
@@ -70,8 +70,8 @@ void setup() {
   // iterate through all handles and initialize the Stepper Motors
   for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
     Serial.printf("Initialize Stepper: %s\n", stepperList[i].name);
-    Serial.printf("Max speed: %d\n", stepperList[i].vMax);
-    stepperList[i].stepper.setMaxSpeed(stepperList[i].vMax);
+    Serial.printf("Max speed: %d\n", 2000);
+    stepperList[i].stepper.setMaxSpeed(2000);
     Serial.printf("Acceleration: %d\n", stepperList[i].acc);
     stepperList[i].stepper.setAcceleration(stepperList[i].acc);
   }
@@ -172,8 +172,24 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
   if (moduleId == 0x01) { // axis controller
     switch (cmd) {
       case 0x00:  // move with given speed (pan + tilt)
-        moveAxis(data[2], data[3]);
+      {
+        if (length != 7) {
+          break;
+        }
+
+        int panSpeed = data[3];
+        if (data[2]) {
+          panSpeed = -panSpeed;
+        }
+
+        int tiltSpeed = data[5];
+        if (data[4]) {
+          tiltSpeed = -tiltSpeed;
+        }
+
+        moveAxis(panSpeed, tiltSpeed);
         break;
+      }
       case 0x01:  // move to position (pan + tilt)
         if (length != 19) {
           break;
@@ -203,20 +219,20 @@ void stopAllAxis() {
   }
 }
 
-void moveAxis(int8_t pan, int8_t tilt) {
+void moveAxis(int pan, int tilt) {
   Serial.printf("Move axis: %d | %d\n", pan, tilt);
 
   if (pan == 0) {
     stepperList[0].state = StepperHandle::State::STOP;
   } else {
-    stepperList[0].stepper.setSpeed(map(pan, -0x7F, 0x7F, -stepperList[0].vMax, stepperList[0].vMax));
+    stepperList[0].stepper.setSpeed(map(pan, -0xFE, 0xFE, -stepperList[0].vMax, stepperList[0].vMax));
     stepperList[0].state = StepperHandle::State::SPEED;
   }
 
   if (tilt == 0) {
     stepperList[1].state = StepperHandle::State::STOP;
   } else {
-    stepperList[1].stepper.setSpeed(map(tilt, -0x7F, 0x7F, -stepperList[1].vMax, stepperList[1].vMax));
+    stepperList[1].stepper.setSpeed(map(tilt, -0xFE, 0xFE, -stepperList[1].vMax, stepperList[1].vMax));
     stepperList[1].state = StepperHandle::State::SPEED;
   }
 

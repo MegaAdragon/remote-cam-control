@@ -169,8 +169,17 @@ if __name__ == '__main__':
             if axis_speed is not None:
                 # 01 00 xx yy FF
                 data = bytearray([0x01, 0x00])
-                data += axis_speed[0].to_bytes(1, byteorder='little', signed=True)
-                data += axis_speed[1].to_bytes(1, byteorder='little', signed=True)
+                if axis_speed[0] < 0:
+                    data += 0x01.to_bytes(1, byteorder='little')
+                else:
+                    data += 0x00.to_bytes(1, byteorder='little')
+                data += abs(axis_speed[0]).to_bytes(1, byteorder='little')
+
+                if axis_speed[1] < 0:
+                    data += 0x01.to_bytes(1, byteorder='little')
+                else:
+                    data += 0x00.to_bytes(1, byteorder='little')
+                data += abs(axis_speed[1]).to_bytes(1, byteorder='little')
                 data += bytearray([0xFF])
                 s.sendall(data)
 
