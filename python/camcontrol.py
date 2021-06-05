@@ -7,12 +7,20 @@ import joystick
 import led_handler
 import argparse
 import signal
+import statusdisplay
 
 try:
     import touchphat
-except ImportError:
+except (ImportError, OSError):
     print("Touch PHAT not supported")
     import touchphat_mock as touchphat
+
+try:
+    from luma.core.interface.serial import i2c
+    from luma.oled.device import ssd1306
+except (ImportError, OSError):
+    print("no display support")
+
 
 def handle_recv(data):
     data = data.split(b'\xFF')
@@ -138,6 +146,11 @@ if __name__ == '__main__':
     joystick = joystick.Joystick(bHandler)
     joystick.init()
 
+    serial = i2c(port=1, address=0x3C)
+    device = ssd1306(serial)
+    status_display = statusdisplay.StatusDisplay(device, joystick)
+    status_display.startup()
+
     while True:
         while True:  # wait for server socket
             try:
@@ -154,6 +167,10 @@ if __name__ == '__main__':
         print("Connected to camera controller")
         stop_all_axis(s)
         led_handler.startup()
+
+        # TODO: add mechanism to support multiple cams
+        cam = statusdisplay.CameraInfo(1)
+        status_display.update(cam)
 
         running = True
         while running:
@@ -192,7 +209,7 @@ if __name__ == '__main__':
 
             try:
                 data = s.recv(128)
-                resp = check_for_resp(data, [0x01, 0x0B])
+                resp = check_for_resp(data, [0x01, 0x0B])   # check axis state
 
                 if resp is not None:
                     if resp['param'][0] != 0 or resp['param'][1] != 0:

@@ -2,7 +2,7 @@ import time
 
 try:
     import touchphat
-except ImportError:
+except (ImportError, OSError):
     print("Touch PHAT not supported")
     import touchphat_mock as touchphat
 

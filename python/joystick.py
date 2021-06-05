@@ -3,7 +3,7 @@ import button_handler
 
 try:
     import touchphat
-except ImportError:
+except (ImportError, OSError):
     import touchphat_mock as touchphat
 
 joystick_key_map = {
@@ -23,6 +23,7 @@ class Joystick:
         self._updateAxis = False
         self._lock = False
         self._button_state = {}
+        self.max_speed = 1.0
         for key in joystick_key_map:
             self._button_state[key] = False
 
@@ -51,9 +52,10 @@ class Joystick:
         if self._joystick is None:
             return
 
-        x_axis = self._joystick.get_axis(0) * ((-self._joystick.get_axis(2) + 1) / 2)
+        self.max_speed = ((-self._joystick.get_axis(2) + 1) / 2)
+        x_axis = self._joystick.get_axis(0) * self.max_speed
         x_axis = x_axis * abs(x_axis)
-        y_axis = -self._joystick.get_axis(1) * ((-self._joystick.get_axis(2) + 1) / 2)
+        y_axis = -self._joystick.get_axis(1) * self.max_speed
         y_axis = y_axis * abs(y_axis)
 
         if abs(x_axis) < 0.001:
