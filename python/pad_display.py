@@ -21,6 +21,8 @@ roboto_bold = ImageFont.truetype('font/RobotoMono-Bold.ttf', 25)
 class PadDisplay:
     def __init__(self, device):
         self._device = device
+        if self._device is None:
+            return
 
         logo = Image.open('dragonfly.png').convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
@@ -29,6 +31,9 @@ class PadDisplay:
         self._device.display(background.convert(self._device.mode))
 
     def _update(self):
+        if self._device is None:
+            return
+
         with canvas(self._device) as draw:
             for p in pads:
                 if p['state']:

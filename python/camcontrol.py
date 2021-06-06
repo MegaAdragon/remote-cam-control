@@ -19,6 +19,7 @@ except (ImportError, OSError):
 try:
     from luma.core.interface.serial import i2c
     from luma.oled.device import ssd1306
+    from luma.core.error import DeviceNotFoundError
 except (ImportError, OSError):
     print("no display support")
 
@@ -35,6 +36,15 @@ def handle_recv(data):
                 byteorder='little', signed=True)
             print("pos:", panPos, tiltPos)
             results.append({'header': [msg[0], msg[1]], 'param': [panPos, tiltPos]})
+
+            on_stored_position = None
+            for key in stored_positions:
+                if stored_positions[key] == [panPos, tiltPos]:
+                    on_stored_position = key
+                    break
+
+            pad_handler.on_position(on_stored_position)
+
         if len(msg) == 4 and msg[0] == 0x01 and msg[1] == 0x0B:
             results.append({'header': [msg[0], msg[1]], 'param': [msg[2], msg[3]]})
     return results
@@ -143,15 +153,20 @@ if __name__ == '__main__':
 
     serial = [i2c(port=1, address=0x3C), i2c(port=1, address=0x3D)]
 
-    pad_display = pad_display.PadDisplay(ssd1306(serial[1]))
-
+    try:
+        pad_display = pad_display.PadDisplay(ssd1306(serial[1]))
+    except DeviceNotFoundError:
+        pad_display = pad_display.PadDisplay(None)
     pad_handler = pad_handler.PadHandler(display=pad_display)
 
     pygame.init()
     joystick = joystick.Joystick(bHandler, pad_handler)
     joystick.init()
 
-    status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]), joystick)
+    try:
+        status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]), joystick)
+    except DeviceNotFoundError:
+        status_display = statusdisplay.StatusDisplay(None, joystick)
 
     while True:
         while True:  # wait for server socket
@@ -215,12 +230,12 @@ if __name__ == '__main__':
 
                 if resp is not None:
                     if resp['param'][0] != 0 or resp['param'][1] != 0:
-                        if args.debug:
-                            s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
+                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
                     if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
                         pad_handler.start_blink()
                     if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
                         pad_handler.stop_blink()
+                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
             except socket.error:
                 pass  # no data yet
 

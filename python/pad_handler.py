@@ -19,6 +19,7 @@ class PadHandler:
         self._toggle = False
         self._start_blink = False
         self._display = display
+        self._on_stored_pos = None
         pass
 
     def startup(self):
@@ -61,6 +62,16 @@ class PadHandler:
         touchphat.set_led(pad, state)
         if self._display is not None:
             self._display.set_pad(pad, state)
+
+    def on_position(self, key):
+        if key is not None:
+            self._on_stored_pos = key
+            self.set_pad(self._on_stored_pos, True)  # currently on this position
+
+        if key is None and self._on_stored_pos is not None:
+            self.set_pad(self._on_stored_pos, False)
+            self._on_stored_pos = key
+            return
 
     def _toggle_selected(self):
         self.set_pad(self._selectedPad, self._toggle)

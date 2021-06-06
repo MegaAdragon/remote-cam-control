@@ -220,8 +220,6 @@ void stopAllAxis() {
 }
 
 void moveAxis(int pan, int tilt) {
-  Serial.printf("Move axis: %d | %d\n", pan, tilt);
-
   if (pan == 0) {
     stepperList[0].state = StepperHandle::State::STOP;
   } else {
@@ -235,8 +233,6 @@ void moveAxis(int pan, int tilt) {
     stepperList[1].stepper.setSpeed(map(tilt, -0xFE, 0xFE, -stepperList[1].vMax, stepperList[1].vMax));
     stepperList[1].state = StepperHandle::State::SPEED;
   }
-
-  Serial.printf("Axis speed: %f | %f\n", stepperList[0].stepper.speed(), stepperList[1].stepper.speed());
 }
 
 void moveToPosition(long panPos, long tiltPos) {

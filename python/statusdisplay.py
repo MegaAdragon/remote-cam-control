@@ -25,6 +25,9 @@ class StatusDisplay:
         self._device = device
         self._joystick = joystick
 
+        if self._device is None:
+            return
+
         img_path = 'dragonfly.png'
         logo = Image.open(img_path).convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
@@ -38,6 +41,9 @@ class StatusDisplay:
     def update(self, cam):
         cam: CameraInfo
         if cam is None:
+            return
+
+        if self._device is None:
             return
 
         roboto_bold = ImageFont.truetype('font/RobotoMono-Bold.ttf', 20)
