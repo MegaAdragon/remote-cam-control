@@ -1,5 +1,6 @@
 from PIL import Image
 from PIL import ImageFont
+import os
 
 from joystick import Joystick
 
@@ -15,7 +16,7 @@ pads = [
     {'key': 'D', 'box': (63, 33, 123, 63), 'state': False}
 ]
 
-roboto_bold = ImageFont.truetype('font/RobotoMono-Bold.ttf', 25)
+roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 25)
 
 
 class PadDisplay:
@@ -24,7 +25,7 @@ class PadDisplay:
         if self._device is None:
             return
 
-        logo = Image.open('dragonfly.png').convert("RGBA")
+        logo = Image.open(os.path.join(os.path.dirname(__file__), 'dragonfly.png')).convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
         pos = ((self._device.width - logo.width) // 2, 0)
         background.paste(logo, pos)

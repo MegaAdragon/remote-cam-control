@@ -34,15 +34,16 @@ def handle_recv(data):
             tiltPos = int.from_bytes(
                 bytearray([msg[10] + msg[11], msg[12] + msg[13], msg[14] + msg[15], msg[16] + msg[17]]),
                 byteorder='little', signed=True)
-            print("pos:", panPos, tiltPos)
             results.append({'header': [msg[0], msg[1]], 'param': [panPos, tiltPos]})
+
+            if args.debug:
+                print("pos:", panPos, tiltPos)
 
             on_stored_position = None
             for key in stored_positions:
                 if stored_positions[key] == [panPos, tiltPos]:
                     on_stored_position = key
                     break
-
             pad_handler.on_position(on_stored_position)
 
         if len(msg) == 4 and msg[0] == 0x01 and msg[1] == 0x0B:
@@ -85,6 +86,7 @@ def stop_all_axis(sock):
     joystick.lock()
 
 
+# TODO: move this -> causes issue same pos is stored multiple times
 stored_positions = {}
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 

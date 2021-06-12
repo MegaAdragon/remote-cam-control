@@ -1,5 +1,6 @@
 from PIL import Image
 from PIL import ImageFont
+import os
 
 from joystick import Joystick
 
@@ -8,6 +9,10 @@ try:
 except (ImportError, OSError):
     import pygame
     screen = pygame.display.set_mode((128, 64))
+
+roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 20)
+roboto_bold_s = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 12)
+roboto_medium = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 10)
 
 
 class CameraInfo:
@@ -28,8 +33,7 @@ class StatusDisplay:
         if self._device is None:
             return
 
-        img_path = 'dragonfly.png'
-        logo = Image.open(img_path).convert("RGBA")
+        logo = Image.open(os.path.join(os.path.dirname(__file__), 'dragonfly.png')).convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
         pos = ((self._device.width - logo.width) // 2, 0)
         background.paste(logo, pos)
@@ -46,9 +50,6 @@ class StatusDisplay:
         if self._device is None:
             return
 
-        roboto_bold = ImageFont.truetype('font/RobotoMono-Bold.ttf', 20)
-        roboto_bold_s = ImageFont.truetype('font/RobotoMono-Bold.ttf', 12)
-        roboto_medium = ImageFont.truetype('font/RobotoMono-Medium.ttf', 10)
         with canvas(self._device) as draw:
             pos = "{:>8}"
             draw.text((0, 0), "Cam {}".format(cam.id), fill='white', font=roboto_bold)
