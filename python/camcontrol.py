@@ -92,13 +92,13 @@ bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 
 @touchphat.on_touch(['Back', 'A', 'B', 'C', 'D'])
 def handle_touch(event):
-    pad_handler.set_pad(event.name, True)  # TODO: not sure if this is too much for the event handler
+    pad_handler.set_pad(event.name, True)
     bHandler.on_pressed(event.name)
 
 
 @touchphat.on_release(['Back', 'A', 'B', 'C', 'D'])
 def handle_release(event):
-    pad_handler.set_pad(event.name, False)  # TODO: not sure if this is too much for the event handler
+    pad_handler.set_pad(event.name, False)
     bHandler.on_released(event.name)
 
 

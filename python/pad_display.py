@@ -21,6 +21,7 @@ roboto_small = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/
 class PadDisplay:
     def __init__(self, device):
         self._device = device
+        self._need_update = True
         if self._device is None:
             return
 
@@ -30,8 +31,8 @@ class PadDisplay:
         background.paste(logo, pos)
         self._device.display(background.convert(self._device.mode))
 
-    def _update(self):
-        if self._device is None:
+    def update(self):
+        if self._device is None or not self._need_update:
             return
 
         with canvas(self._device) as draw:
@@ -48,6 +49,10 @@ class PadDisplay:
                         draw.text((p['box'][0] + 22, p['box'][1]), p['key'], fill='white', font=roboto_bold)
                     else:
                         draw.text((p['box'][0] + 25, p['box'][1] + 7), p['key'], fill='white', font=roboto_small)
+        self._need_update = False
+
+    def _update(self):
+        self._need_update = True
 
     def all_off(self):
         for p in pads:
