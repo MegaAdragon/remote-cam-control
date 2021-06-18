@@ -64,14 +64,18 @@ class PadHandler:
             self._display.set_pad(pad, state)
 
     def on_position(self, key):
-        if key is not None:
-            self._on_stored_pos = key
-            self.set_pad(self._on_stored_pos, True)  # currently on this position
-
-        if key is None and self._on_stored_pos is not None:
-            self.set_pad(self._on_stored_pos, False)
-            self._on_stored_pos = key
+        if key is self._on_stored_pos:
+            # TODO: this should not be necessary
+            if self._on_stored_pos is not None:
+                self.set_pad(self._on_stored_pos, True)
             return
+
+        if self._on_stored_pos is not None:
+            self.set_pad(self._on_stored_pos, False)
+
+        self._on_stored_pos = key
+        if key is not None:
+            self.set_pad(self._on_stored_pos, True)  # currently on this position
 
     def _toggle_selected(self):
         self.set_pad(self._selectedPad, self._toggle)

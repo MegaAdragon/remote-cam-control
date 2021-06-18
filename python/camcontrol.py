@@ -86,18 +86,19 @@ def stop_all_axis(sock):
     joystick.lock()
 
 
-# TODO: move this -> causes issue same pos is stored multiple times
 stored_positions = {}
 bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
 
 
 @touchphat.on_touch(['Back', 'A', 'B', 'C', 'D'])
 def handle_touch(event):
+    pad_handler.set_pad(event.name, True)  # TODO: not sure if this is too much for the event handler
     bHandler.on_pressed(event.name)
 
 
 @touchphat.on_release(['Back', 'A', 'B', 'C', 'D'])
 def handle_release(event):
+    pad_handler.set_pad(event.name, False)  # TODO: not sure if this is too much for the event handler
     bHandler.on_released(event.name)
 
 
@@ -125,6 +126,13 @@ def handle_long_press(key):
     s.sendall(bytearray([0x01, 0x0A, 0xFF]))
     resp = wait_for_resp(s, [0x01, 0x0A])
     print("store", key, resp['param'][0], resp['param'][1])
+
+    existing_key = None
+    for k in stored_positions:
+        if stored_positions[k] == resp['param']:
+            existing_key = k
+            break
+    stored_positions.pop(existing_key, None)
     stored_positions[key] = resp['param']
 
 
@@ -134,10 +142,70 @@ def handle_restart(key):
     # TODO: reset everything
 
 
+def wait_for_server():
+    while True:  # wait for server socket
+        try:
+            touchphat.all_on()
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)
+            s.connect((args.server, args.port))
+            s.setblocking(False)
+            return s
+        except socket.error:
+            touchphat.all_off()
+            time.sleep(1)
+
+
 def shutdown_handler(signo, stack_frame):
     if s is not None:
         s.close()
     sys.exit()
+
+
+def handle_joystick(joystick, sock):
+    axis_speed = joystick.get_axis_speed()
+    if axis_speed is not None:
+        # 01 00 xx yy FF
+        data = bytearray([0x01, 0x00])
+        if axis_speed[0] < 0:
+            data += 0x01.to_bytes(1, byteorder='little')
+        else:
+            data += 0x00.to_bytes(1, byteorder='little')
+        data += abs(axis_speed[0]).to_bytes(1, byteorder='little')
+
+        if axis_speed[1] < 0:
+            data += 0x01.to_bytes(1, byteorder='little')
+        else:
+            data += 0x00.to_bytes(1, byteorder='little')
+        data += abs(axis_speed[1]).to_bytes(1, byteorder='little')
+        data += bytearray([0xFF])
+        sock.sendall(data)
+
+
+def poll_axis_state(sock):
+    try:
+        # poll the current axis state
+        sock.sendall(bytearray([0x01, 0x0B, 0xFF]))
+    except socket.error:
+        print("lost connection")
+        # FIXME
+        return False
+
+    try:
+        data = sock.recv(128)
+        resp = check_for_resp(data, [0x01, 0x0B])  # check axis state
+
+        if resp is not None:
+            if resp['param'][0] != 0 or resp['param'][1] != 0:
+                sock.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
+            if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
+                pad_handler.start_blink()
+            if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
+                pad_handler.stop_blink()
+                sock.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
+    except socket.error:
+        pass  # no data yet
+    return True
 
 
 signal.signal(signal.SIGINT, shutdown_handler)
@@ -161,35 +229,26 @@ if __name__ == '__main__':
         pad_display = pad_display.PadDisplay(None)
     pad_handler = pad_handler.PadHandler(display=pad_display)
 
+    try:
+        status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]))
+    except DeviceNotFoundError:
+        status_display = statusdisplay.StatusDisplay(None)
+
     pygame.init()
     joystick = joystick.Joystick(bHandler, pad_handler)
     joystick.init()
 
-    try:
-        status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]), joystick)
-    except DeviceNotFoundError:
-        status_display = statusdisplay.StatusDisplay(None, joystick)
-
     while True:
-        while True:  # wait for server socket
-            try:
-                touchphat.all_on()
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(1)
-                s.connect((args.server, args.port))
-                s.setblocking(False)
-                break
-            except socket.error:
-                touchphat.all_off()
-                time.sleep(1)
-
+        s = wait_for_server()
         print("Connected to camera controller")
         stop_all_axis(s)
 
         # TODO: add mechanism to support multiple cams
         cam = statusdisplay.CameraInfo(1)
-        status_display.update(cam)
+        status_display.update(cam, joystick.max_speed)
         pad_handler.startup()
+
+        last_tick = 0
 
         running = True
         while running:
@@ -197,48 +256,17 @@ if __name__ == '__main__':
                 if event.type == pygame.QUIT:
                     running = False
 
-            joystick.process()
+            tick = time.time()
+
             bHandler.process()
             pad_handler.process()
+            joystick.process()
 
-            axis_speed = joystick.get_axis_speed()
-            if axis_speed is not None:
-                # 01 00 xx yy FF
-                data = bytearray([0x01, 0x00])
-                if axis_speed[0] < 0:
-                    data += 0x01.to_bytes(1, byteorder='little')
-                else:
-                    data += 0x00.to_bytes(1, byteorder='little')
-                data += abs(axis_speed[0]).to_bytes(1, byteorder='little')
+            status_display.update(cam, joystick.max_speed)
 
-                if axis_speed[1] < 0:
-                    data += 0x01.to_bytes(1, byteorder='little')
-                else:
-                    data += 0x00.to_bytes(1, byteorder='little')
-                data += abs(axis_speed[1]).to_bytes(1, byteorder='little')
-                data += bytearray([0xFF])
-                s.sendall(data)
+            if tick - last_tick > 0.1:
+                handle_joystick(joystick, s)
+                poll_axis_state(s)
+                last_tick = tick
 
-            try:
-                # poll the current axis state
-                s.sendall(bytearray([0x01, 0x0B, 0xFF]))
-            except socket.error:
-                print("lost connection")
-                running = False
-
-            try:
-                data = s.recv(128)
-                resp = check_for_resp(data, [0x01, 0x0B])   # check axis state
-
-                if resp is not None:
-                    if resp['param'][0] != 0 or resp['param'][1] != 0:
-                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
-                    if resp['param'][0] == 2 or resp['param'][1] == 2:  # axis started moving to position
-                        pad_handler.start_blink()
-                    if resp['param'][0] != 2 and resp['param'][1] != 2:  # all axis reached target
-                        pad_handler.stop_blink()
-                        s.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
-            except socket.error:
-                pass  # no data yet
-
-            time.sleep(0.1)
+            time.sleep(0.01)

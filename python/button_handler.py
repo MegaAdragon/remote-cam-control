@@ -66,7 +66,7 @@ class ButtonHandler:
                 if current_time - button['pressStart'] > 0.2:
                     button['state'] = 'Pressed'
             elif button['state'] == 'Pressed':
-                if current_time - button['pressStart'] > 1.5:
+                if current_time - button['pressStart'] > 2:
                     button['state'] = 'LongPressed'
                     if 'on_long_press' in button:
                         button['on_long_press'](button['key'])
