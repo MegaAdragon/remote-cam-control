@@ -2,21 +2,20 @@ from PIL import Image
 from PIL import ImageFont
 import os
 
-from joystick import Joystick
-
 try:
     from luma.core.render import canvas
 except (ImportError, OSError):
     pass
 
 pads = [
-    {'key': 'A', 'box': (0, 0, 60, 30), 'state': False},
-    {'key': 'B', 'box': (63, 0, 123, 30), 'state': False},
-    {'key': 'C', 'box': (0, 33, 60, 63), 'state': False},
-    {'key': 'D', 'box': (63, 33, 123, 63), 'state': False}
+    {'key': 'A', 'box': (0, 0, 60, 30), 'state': False, 'stored': False},
+    {'key': 'B', 'box': (63, 0, 123, 30), 'state': False, 'stored': False},
+    {'key': 'C', 'box': (0, 33, 60, 63), 'state': False, 'stored': False},
+    {'key': 'D', 'box': (63, 33, 123, 63), 'state': False, 'stored': False}
 ]
 
 roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 25)
+roboto_small = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 15)
 
 
 class PadDisplay:
@@ -39,10 +38,16 @@ class PadDisplay:
             for p in pads:
                 if p['state']:
                     draw.rectangle(p['box'], outline='white', fill='white')
-                    draw.text((p['box'][0] + 20, p['box'][1]), p['key'], fill='black', font=roboto_bold)
+                    if p['stored']:
+                        draw.text((p['box'][0] + 22, p['box'][1]), p['key'], fill='black', font=roboto_bold)
+                    else:
+                        draw.text((p['box'][0] + 25, p['box'][1] + 7), p['key'], fill='black', font=roboto_small)
                 else:
                     draw.rectangle(p['box'], outline='white', fill='black')
-                    draw.text((p['box'][0] + 20, p['box'][1]), p['key'], fill='white', font=roboto_bold)
+                    if p['stored']:
+                        draw.text((p['box'][0] + 22, p['box'][1]), p['key'], fill='white', font=roboto_bold)
+                    else:
+                        draw.text((p['box'][0] + 25, p['box'][1] + 7), p['key'], fill='white', font=roboto_small)
 
     def all_off(self):
         for p in pads:
@@ -66,3 +71,9 @@ class PadDisplay:
             return
         p['state'] = state
         self._update()
+
+    def pad_stored(self, pad, is_stored):
+        p = self._get_pad(pad)
+        if p is None:
+            return
+        p['stored'] = is_stored

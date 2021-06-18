@@ -132,14 +132,26 @@ def handle_long_press(key):
         if stored_positions[k] == resp['param']:
             existing_key = k
             break
-    stored_positions.pop(existing_key, None)
+    if existing_key is not None:
+        del stored_positions[existing_key]
+        pad_display.pad_stored(existing_key, False)
     stored_positions[key] = resp['param']
+    pad_display.pad_stored(key, True)
 
 
 @bHandler.on_long_press(['Back'])
 def handle_restart(key):
     print("request restart")
-    # TODO: reset everything
+
+    for i in range(0, 5):
+        touchphat.set_led(key, True)
+        time.sleep(0.1)
+        touchphat.set_led(key, False)
+        time.sleep(0.1)
+
+    if s is not None:
+        s.close()
+    sys.exit()
 
 
 def wait_for_server():
@@ -183,14 +195,7 @@ def handle_joystick(joystick, sock):
 
 
 def poll_axis_state(sock):
-    try:
-        # poll the current axis state
-        sock.sendall(bytearray([0x01, 0x0B, 0xFF]))
-    except socket.error:
-        print("lost connection")
-        # FIXME
-        return False
-
+    sock.sendall(bytearray([0x01, 0x0B, 0xFF]))
     try:
         data = sock.recv(128)
         resp = check_for_resp(data, [0x01, 0x0B])  # check axis state
@@ -205,7 +210,6 @@ def poll_axis_state(sock):
                 sock.sendall(bytearray([0x01, 0x0A, 0xFF]))  # poll the current axis position
     except socket.error:
         pass  # no data yet
-    return True
 
 
 signal.signal(signal.SIGINT, shutdown_handler)
@@ -265,8 +269,13 @@ if __name__ == '__main__':
             status_display.update(cam, joystick.max_speed)
 
             if tick - last_tick > 0.1:
-                handle_joystick(joystick, s)
-                poll_axis_state(s)
+                try:
+                    handle_joystick(joystick, s)
+                    poll_axis_state(s)
+                except socket.error:
+                    print("lost connection")
+                    running = False
+                    break
                 last_tick = tick
 
             time.sleep(0.01)
