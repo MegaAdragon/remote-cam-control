@@ -247,6 +247,9 @@ if __name__ == '__main__':
         print("Connected to camera controller")
         stop_all_axis(s)
 
+        # configure axis acceleration -> 0 - 100 per axis
+        s.sendall(bytearray([0x01, 0xB0, 70, 40]))
+
         # TODO: add mechanism to support multiple cams
         cam = statusdisplay.CameraInfo(1)
         status_display.update(cam, joystick.max_speed)
@@ -267,6 +270,7 @@ if __name__ == '__main__':
             joystick.process()
 
             status_display.update(cam, joystick.max_speed)
+            pad_display.update()
 
             if tick - last_tick > 0.1:
                 try:

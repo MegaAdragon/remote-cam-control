@@ -37,13 +37,13 @@ StepperHandle stepperList[] {
   {
     .name = "Pan",
     .vMax = 750,
-    .acc = 1000.0f,
+    .acc = 750.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 16, 4)  // D0 -> STEP, D2 -> DIR
   },
   {
     .name = "Tilt",
     .vMax = 750,
-    .acc = 1000.0f,
+    .acc = 750.0f,
     .stepper = AccelStepper (AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
   }
 };
@@ -206,6 +206,14 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
         break;
       case 0x0B:  // get axis state
         sendAxisState(client, cmd);
+        break;
+      case 0xB0:  // set axis acceleration
+        stepperList[0].stepper.setAcceleration(map(data[2], 0, 100, 0, 2000));
+        stepperList[0].stepper.setAcceleration(map(data[3], 0, 100, 0, 2000));
+        break;
+      case 0xB1:  // set axis max speed
+        stepperList[0].stepper.setMaxSpeed(map(data[2], 0, 100, 0, 2000));
+        stepperList[0].stepper.setMaxSpeed(map(data[3], 0, 100, 0, 2000));
         break;
       default:
         break;
