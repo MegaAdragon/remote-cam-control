@@ -87,7 +87,7 @@ def stop_all_axis(sock):
 
 
 stored_positions = {}
-bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back'])
+bHandler = button_handler.ButtonHandler(['A', 'B', 'C', 'D', 'Back', 'Trigger1', 'Trigger2'])
 
 
 @touchphat.on_touch(['Back', 'A', 'B', 'C', 'D'])
@@ -115,6 +115,17 @@ def handle_press(key):
         s.sendall(data)
         pad_handler.set_selected(key)
 
+@bHandler.on_press(['Trigger1', 'Trigger2'])
+def handle_press(key):
+    print("on_press", key)
+    stop_all_axis(s)
+    data = None
+    if key == 'Trigger1':
+        data = bytearray([0x02, 0x01, 0xFF])
+    elif key == 'Trigger2':
+        data = bytearray([0x02, 0x02, 0xFF])
+
+    s.sendall(data)
 
 @bHandler.on_long_press(['A', 'B', 'C', 'D'])
 def handle_long_press(key):

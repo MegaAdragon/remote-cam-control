@@ -51,6 +51,9 @@ StepperHandle stepperList[] {
 const int enablePin = 5;  // D1
 const int disableTimeout = 100;  // motor output is disabled after this timeout (in ms)
 
+#define IO_6 12 // D6
+#define IO_7 13 // D7
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -79,6 +82,12 @@ void setup() {
   // initialize the motor output enable pin (LOW active)
   digitalWrite(enablePin, HIGH);
   pinMode(enablePin, OUTPUT);
+
+  // initialize IOs
+  digitalWrite(IO_6, LOW);
+  pinMode(IO_6, OUTPUT);
+  digitalWrite(IO_7, LOW);
+  pinMode(IO_7, OUTPUT);
 }
 
 void loop() {
@@ -207,13 +216,30 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
       case 0x0B:  // get axis state
         sendAxisState(client, cmd);
         break;
-      case 0xB0:  // set axis acceleration
+      case 0xB0:  // set axis accelartion
         stepperList[0].stepper.setAcceleration(map(data[2], 0, 100, 0, 2000));
         stepperList[0].stepper.setAcceleration(map(data[3], 0, 100, 0, 2000));
         break;
       case 0xB1:  // set axis max speed
         stepperList[0].stepper.setMaxSpeed(map(data[2], 0, 100, 0, 2000));
         stepperList[0].stepper.setMaxSpeed(map(data[3], 0, 100, 0, 2000));
+        break;
+      default:
+        break;
+    }
+  } else if (moduleId == 0x02) {
+    switch (cmd) {
+      case 0x01:
+        stopAllAxis();
+        digitalWrite(IO_6, HIGH);
+        delay(100);
+        digitalWrite(IO_6, LOW);
+        break;
+      case 0x02:
+        stopAllAxis();
+        digitalWrite(IO_7, HIGH);
+        delay(100);
+        digitalWrite(IO_7, LOW);
         break;
       default:
         break;

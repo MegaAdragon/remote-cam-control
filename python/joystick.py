@@ -11,6 +11,8 @@ joystick_key_map = {
     'B': 2,
     'C': 3,
     'D': 4,
+    'Trigger1': 5,
+    'Trigger2': 6
 }
 
 

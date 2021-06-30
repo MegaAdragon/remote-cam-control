@@ -59,6 +59,8 @@ class PadHandler:
         self._selectedPad = None
 
     def set_pad(self, pad, state):
+        if pad not in pads:
+            return
         touchphat.set_led(pad, state)
         if self._display is not None:
             self._display.set_pad(pad, state)
