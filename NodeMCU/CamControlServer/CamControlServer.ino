@@ -6,7 +6,7 @@
 const char* ssid = "";
 const char* password =  "";
 
-WiFiServer wifiServer(80);  // TCP socket server on port 80
+WiFiServer wifiServer(9999);  // TCP socket server on port 9999
 
 /*
    Axis steps are represented as 2 byte unsigned integer
@@ -75,7 +75,7 @@ void setup() {
     Serial.printf("Initialize Stepper: %s\n", stepperList[i].name);
     Serial.printf("Max speed: %d\n", 2000);
     stepperList[i].stepper.setMaxSpeed(2000);
-    Serial.printf("Acceleration: %d\n", stepperList[i].acc);
+    Serial.printf("Acceleration: %f\n", stepperList[i].acc);
     stepperList[i].stepper.setAcceleration(stepperList[i].acc);
   }
 
@@ -216,13 +216,13 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
       case 0x0B:  // get axis state
         sendAxisState(client, cmd);
         break;
-      case 0xB0:  // set axis accelartion
+      case 0xB0:  // set axis acceleration
         stepperList[0].stepper.setAcceleration(map(data[2], 0, 100, 0, 2000));
-        stepperList[0].stepper.setAcceleration(map(data[3], 0, 100, 0, 2000));
+        stepperList[1].stepper.setAcceleration(map(data[3], 0, 100, 0, 2000));
         break;
       case 0xB1:  // set axis max speed
         stepperList[0].stepper.setMaxSpeed(map(data[2], 0, 100, 0, 2000));
-        stepperList[0].stepper.setMaxSpeed(map(data[3], 0, 100, 0, 2000));
+        stepperList[1].stepper.setMaxSpeed(map(data[3], 0, 100, 0, 2000));
         break;
       default:
         break;
@@ -238,7 +238,7 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
       case 0x02:
         stopAllAxis();
         digitalWrite(IO_7, HIGH);
-        delay(100);
+        delay(3000);
         digitalWrite(IO_7, LOW);
         break;
       default:
