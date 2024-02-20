@@ -1,29 +1,29 @@
 #include <assert.h>
 #include <AccelStepper.h>
 #include <ESP8266WiFi.h>
+#include <ArduinoOTA.h>
 
 // TODO: add some kind of configuration mechanism here
 const char* ssid = "";
-const char* password =  "";
+const char* password = "";
 
 WiFiServer wifiServer(9999);  // TCP socket server on port 9999
 
 /*
-   Axis steps are represented as 2 byte unsigned integer
-*/
-typedef union
-{
+ * Axis steps are represented as 2 byte unsigned integer
+ */
+typedef union {
   int32_t steps;
   byte data[4];  // little endian
 } StepperPosition;
 
 /*
-   Structure to hold all the information for a Stepper Motor (handle)
-*/
+ *  Structure to hold all the information for a Stepper Motor (handle)
+ */
 typedef struct {
-  const char* name; // this is only for debug purposes
-  const int vMax; // max speed
-  const float acc;  // acceleration
+  const char* name;  // this is only for debug purposes
+  const int vMax;    // max speed
+  const float acc;   // acceleration
   AccelStepper stepper;
 
   enum State {
@@ -33,30 +33,31 @@ typedef struct {
   } state;
 } StepperHandle;
 
-StepperHandle stepperList[] {
+StepperHandle stepperList[]{
   {
     .name = "Pan",
     .vMax = 750,
     .acc = 750.0f,
-    .stepper = AccelStepper (AccelStepper::DRIVER, 16, 4)  // D0 -> STEP, D2 -> DIR
+    .stepper = AccelStepper(AccelStepper::DRIVER, 16, 4)  // D0 -> STEP, D2 -> DIR
   },
   {
     .name = "Tilt",
     .vMax = 750,
     .acc = 750.0f,
-    .stepper = AccelStepper (AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
+    .stepper = AccelStepper(AccelStepper::DRIVER, 0, 2)  // D3 -> STEP, D4 -> DIR
   }
 };
 
-const int enablePin = 5;  // D1
+const int enablePin = 5;         // D1
 const int disableTimeout = 100;  // motor output is disabled after this timeout (in ms)
 
-#define IO_6 12 // D6
-#define IO_7 13 // D7
+#define IO_6 12  // D6
+#define IO_7 13  // D7
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
   // wait for WiFi connection
@@ -68,13 +69,21 @@ void setup() {
   Serial.print("Connected to WiFi. IP:");
   Serial.println(WiFi.localIP());
 
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\n", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+  });
+
+  ArduinoOTA.begin();
   wifiServer.begin();
 
   // iterate through all handles and initialize the Stepper Motors
   for (int i = 0; i < sizeof(stepperList) / sizeof(stepperList[0]); i++) {
     Serial.printf("Initialize Stepper: %s\n", stepperList[i].name);
-    Serial.printf("Max speed: %d\n", 2000);
-    stepperList[i].stepper.setMaxSpeed(2000);
+    Serial.printf("Max speed: %d\n", stepperList[i].vMax);
+    stepperList[i].stepper.setMaxSpeed(stepperList[i].vMax);
     Serial.printf("Acceleration: %f\n", stepperList[i].acc);
     stepperList[i].stepper.setAcceleration(stepperList[i].acc);
   }
@@ -91,6 +100,7 @@ void setup() {
 }
 
 void loop() {
+  ArduinoOTA.handle();
   WiFiClient client = wifiServer.available();
 
   if (client) {
@@ -109,12 +119,12 @@ void loop() {
         }
 
         switch (stepperList[i].state) {
-          case StepperHandle::State::SPEED: // move stepper with constant speed
+          case StepperHandle::State::SPEED:  // move stepper with constant speed
             stepperList[i].stepper.runSpeed();
             break;
           case StepperHandle::State::TARGET:  // move stepper to target position (with acceleration + decceleration)
             if (!stepperList[i].stepper.run()) {
-              stepperList[i].state = StepperHandle::State::STOP; // stepper reached target -> stop
+              stepperList[i].state = StepperHandle::State::STOP;  // stepper reached target -> stop
             }
             break;
           case StepperHandle::State::STOP:
@@ -150,7 +160,7 @@ void commHandler(WiFiClient& client) {
 
     if (idx >= sizeof(buf)) {
       assert(false);
-      idx = 0; // overflow -> this should never happen
+      idx = 0;  // overflow -> this should never happen
       Serial.println("Error: overflow");
     }
 
@@ -178,27 +188,27 @@ void handleCommand(WiFiClient& client, byte data[], int length) {
   byte moduleId = data[0];
   byte cmd = data[1];
 
-  if (moduleId == 0x01) { // axis controller
+  if (moduleId == 0x01) {  // axis controller
     switch (cmd) {
       case 0x00:  // move with given speed (pan + tilt)
-      {
-        if (length != 7) {
+        {
+          if (length != 7) {
+            break;
+          }
+
+          int panSpeed = data[3];
+          if (data[2]) {
+            panSpeed = -panSpeed;
+          }
+
+          int tiltSpeed = data[5];
+          if (data[4]) {
+            tiltSpeed = -tiltSpeed;
+          }
+
+          moveAxis(panSpeed, tiltSpeed);
           break;
         }
-
-        int panSpeed = data[3];
-        if (data[2]) {
-          panSpeed = -panSpeed;
-        }
-
-        int tiltSpeed = data[5];
-        if (data[4]) {
-          tiltSpeed = -tiltSpeed;
-        }
-
-        moveAxis(panSpeed, tiltSpeed);
-        break;
-      }
       case 0x01:  // move to position (pan + tilt)
         if (length != 19) {
           break;
@@ -285,7 +295,7 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
 
   byte resp[20];  // response buffer
   byte idx = 0;
-  resp[idx++] = 0x01; // module ID: axis controller
+  resp[idx++] = 0x01;  // module ID: axis controller
   resp[idx++] = cmd;
 
   // encode 4 byte axis position into 8 bytes with padding
@@ -293,7 +303,7 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
     idx += encodeStepperPos(stepperList[i].stepper.currentPosition(), &resp[idx]);
   }
 
-  resp[idx++] = 0xFF; // add delimiter
+  resp[idx++] = 0xFF;  // add delimiter
   assert(idx < sizeof(resp));
   client.write(resp, idx);  // send response
 }
@@ -301,7 +311,7 @@ void sendAxisPosition(WiFiClient& client, byte cmd) {
 void sendAxisState(WiFiClient& client, byte cmd) {
   byte resp[20];  // response buffer
   byte idx = 0;
-  resp[idx++] = 0x01; // module ID: axis controller
+  resp[idx++] = 0x01;  // module ID: axis controller
   resp[idx++] = cmd;
 
   // add axis state to buffer
@@ -309,22 +319,21 @@ void sendAxisState(WiFiClient& client, byte cmd) {
     resp[idx++] = stepperList[i].state;
   }
 
-  resp[idx++] = 0xFF; // add delimiter
+  resp[idx++] = 0xFF;  // add delimiter
   assert(idx < sizeof(resp));
   client.write(resp, idx);  // send response
 }
 
 /*
-   Encode stepper position into byte buffer.
-   Return number of encoded bytes.
-*/
+ * Encode stepper position into byte buffer.
+ * Return number of encoded bytes.
+ */
 int encodeStepperPos(long steps, byte data[]) {
   StepperPosition pos;
   pos.steps = steps;
 
   byte idx;
-  for (idx = 0; idx < sizeof(pos.steps) * 2; idx++)
-  {
+  for (idx = 0; idx < sizeof(pos.steps) * 2; idx++) {
     if (idx % 2 == 0) {
       data[idx] = pos.data[idx / 2] & 0xF0;
     } else {
