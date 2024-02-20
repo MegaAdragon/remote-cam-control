@@ -1,18 +1,12 @@
 from PIL import Image
 from PIL import ImageFont
 import os
-
+from luma.core.render import canvas
 from joystick import Joystick
-
-try:
-    from luma.core.render import canvas
-except (ImportError, OSError):
-    pass
 
 roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 20)
 roboto_bold_s = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 12)
 roboto_medium = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 10)
-
 
 class CameraInfo:
     def __init__(self, id):
@@ -30,12 +24,6 @@ class StatusDisplay:
         if self._device is None:
             return
 
-        logo = Image.open(os.path.join(os.path.dirname(__file__), 'dragonfly.png')).convert("RGBA")
-        background = Image.new("RGBA", self._device.size, "black")
-        pos = ((self._device.width - logo.width) // 2, 0)
-        background.paste(logo, pos)
-        self._device.display(background.convert(self._device.mode))
-
     def update(self, cam, speed):
         cam: CameraInfo
         if cam is None:
@@ -51,10 +39,10 @@ class StatusDisplay:
         self._cam = cam
 
         with canvas(self._device) as draw:
-            draw.text((0, 0), "Cam {}".format(cam.id), fill='white', font=roboto_bold)
+            draw.text((0, 100), "Cam {}".format(cam.id), fill='white', font=roboto_bold)
 
-            draw.text((0, 30), "Max speed:", fill='white', font=roboto_bold_s)
-            draw.text((75, 32), "{:>3}%".format(round(100 * speed)), fill='white', font=roboto_medium)
+            draw.text((0, 130), "Max speed:", fill='white', font=roboto_bold_s)
+            draw.text((75, 132), "{:>3}%".format(round(100 * speed)), fill='white', font=roboto_medium)
 
             #draw.text((0, 50), "Zoom:", fill='white', font=roboto_bold_s)
             #draw.text((40, 52), "{:>3}%".format(100), fill='white', font=roboto_medium)

@@ -1,21 +1,24 @@
 from PIL import Image
 from PIL import ImageFont
+from luma.core.render import canvas
+from joystick import Joystick
 import os
 
-try:
-    from luma.core.render import canvas
-except (ImportError, OSError):
-    pass
+class CameraInfo:
+    def __init__(self, id):
+        self.id = id
 
 pads = [
-    {'key': 'A', 'box': (0, 0, 60, 30), 'state': False, 'stored': False},
-    {'key': 'B', 'box': (63, 0, 123, 30), 'state': False, 'stored': False},
-    {'key': 'C', 'box': (0, 33, 60, 63), 'state': False, 'stored': False},
-    {'key': 'D', 'box': (63, 33, 123, 63), 'state': False, 'stored': False}
+    {'key': 'A', 'box': (2, 0, 62, 30), 'state': False, 'stored': False},
+    {'key': 'B', 'box': (65, 0, 127, 30), 'state': False, 'stored': False},
+    {'key': 'C', 'box': (2, 33, 62, 63), 'state': False, 'stored': False},
+    {'key': 'D', 'box': (65, 33, 127, 63), 'state': False, 'stored': False}
 ]
 
-roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 25)
+roboto_bold = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Bold.ttf'), 20)
 roboto_small = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 15)
+roboto_bold_s = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 12)
+roboto_medium = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'font/RobotoMono-Medium.ttf'), 10)
 
 
 class PadDisplay:
@@ -25,9 +28,12 @@ class PadDisplay:
         if self._device is None:
             return
 
+        self._max_speed = 0.0
+        self._cam = None
+
         logo = Image.open(os.path.join(os.path.dirname(__file__), 'dragonfly.png')).convert("RGBA")
         background = Image.new("RGBA", self._device.size, "black")
-        pos = ((self._device.width - logo.width) // 2, 0)
+        pos = ((self._device.width - logo.width) // 2, (self._device.height - logo.height) // 2)
         background.paste(logo, pos)
         self._device.display(background.convert(self._device.mode))
 
@@ -38,18 +44,40 @@ class PadDisplay:
         with canvas(self._device) as draw:
             for p in pads:
                 if p['state']:
-                    draw.rectangle(p['box'], outline='white', fill='white')
                     if p['stored']:
-                        draw.text((p['box'][0] + 22, p['box'][1]), p['key'], fill='black', font=roboto_bold)
+                        draw.rectangle(p['box'], outline='green', fill='white')
+                        draw.text((p['box'][0] + 22, p['box'][1] + 3), p['key'], fill='black', font=roboto_bold)
                     else:
+                        draw.rectangle(p['box'], outline='white', fill='white')
                         draw.text((p['box'][0] + 25, p['box'][1] + 7), p['key'], fill='black', font=roboto_small)
                 else:
-                    draw.rectangle(p['box'], outline='white', fill='black')
                     if p['stored']:
-                        draw.text((p['box'][0] + 22, p['box'][1]), p['key'], fill='white', font=roboto_bold)
+                        draw.rectangle(p['box'], outline='green', fill='black')
+                        draw.text((p['box'][0] + 22, p['box'][1] + 3), p['key'], fill='white', font=roboto_bold)
                     else:
+                        draw.rectangle(p['box'], outline='white', fill='black')
                         draw.text((p['box'][0] + 25, p['box'][1] + 7), p['key'], fill='white', font=roboto_small)
+
+                draw.text((0, 100), "Cam {}".format(self._cam.id), fill='white', font=roboto_bold)
+
+                draw.text((0, 130), "Max speed:", fill='white', font=roboto_bold_s)
+                draw.text((75, 132), "{:>3}%".format(round(100 * self._max_speed)), fill='white', font=roboto_medium)
         self._need_update = False
+
+    def update_status(self, cam, speed):
+        cam: CameraInfo
+        if cam is None:
+            return
+
+        if self._device is None:
+            return
+
+        if self._max_speed == speed and self._cam == cam:
+            return
+
+        self._max_speed = speed
+        self._cam = cam
+        self._update()
 
     def _update(self):
         self._need_update = True

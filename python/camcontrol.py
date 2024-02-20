@@ -17,9 +17,7 @@ except (ImportError, OSError):
     import touchphat_mock as touchphat
 
 try:
-    from luma.core.interface.serial import i2c
-    from luma.oled.device import ssd1306
-    from luma.core.error import DeviceNotFoundError
+    import ST7735
 except (ImportError, OSError):
     print("no display support")
 
@@ -236,18 +234,19 @@ if __name__ == '__main__':
     if args.debug:
         print("debug mode")
 
-    serial = [i2c(port=1, address=0x3C), i2c(port=1, address=0x3D)]
+    disp = ST7735.ST7735(
+        port=0,
+        cs=0,  # ST7735.BG_SPI_CS_FRONT,  # BG_SPI_CSB_BACK or BG_SPI_CS_FRONT
+        rst=25,
+        dc=24,
+        rotation=180,
+        width=128,
+        height=160
+    )
+    disp.begin()
 
-    try:
-        pad_display = pad_display.PadDisplay(ssd1306(serial[1]))
-    except DeviceNotFoundError:
-        pad_display = pad_display.PadDisplay(None)
+    pad_display = pad_display.PadDisplay(disp)
     pad_handler = pad_handler.PadHandler(display=pad_display)
-
-    try:
-        status_display = statusdisplay.StatusDisplay(ssd1306(serial[0]))
-    except DeviceNotFoundError:
-        status_display = statusdisplay.StatusDisplay(None)
 
     pygame.init()
     joystick = joystick.Joystick(bHandler, pad_handler)
@@ -263,7 +262,7 @@ if __name__ == '__main__':
 
         # TODO: add mechanism to support multiple cams
         cam = statusdisplay.CameraInfo(1)
-        status_display.update(cam, joystick.max_speed)
+        pad_display.update_status(cam, joystick.max_speed)
         pad_handler.startup()
 
         last_tick = 0
@@ -280,7 +279,7 @@ if __name__ == '__main__':
             pad_handler.process()
             joystick.process()
 
-            status_display.update(cam, joystick.max_speed)
+            pad_display.update_status(cam, joystick.max_speed)
             pad_display.update()
 
             if tick - last_tick > 0.1:
